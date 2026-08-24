@@ -23,9 +23,11 @@ fi
 echo "Running database migrations..."
 alembic upgrade head || echo "⚠️  Migration failed - will retry on API calls"
 
-# Create necessary directories
-echo "Creating required directories..."
-mkdir -p /app/logs /app/exports /app/uploads /app/celerybeat
+# Create necessary directories (handle permission issues gracefully)
+echo "Ensuring required directories exist..."
+mkdir -p /app/logs /app/exports /app/uploads /app/celerybeat 2>/dev/null || {
+    echo "⚠️  Some directories could not be created - this is normal if using volume mounts"
+}
 
 echo "=========================================="
 echo "Starting Backend Server"

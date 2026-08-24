@@ -33,8 +33,9 @@ COPY . .
 # Remove .env if it exists (docker-compose provides env vars)
 RUN if [ -f .env ]; then mv .env .env.local.example; fi
 
-# Create necessary directories
-RUN mkdir -p /app/logs /app/exports /app/uploads /app/celerybeat
+# Create necessary directories with proper permissions
+RUN mkdir -p /app/logs /app/exports /app/uploads /app/celerybeat && \
+    chmod 755 /app/logs /app/exports /app/uploads /app/celerybeat
 
 # Copy entrypoint script
 COPY docker-entrypoint.sh /usr/local/bin/
@@ -42,7 +43,7 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # Create a non-root user
 RUN useradd -m -u 1000 appuser && \
-    chown -R appuser:appuser /app
+    chown -R appuser:appuser /app /app/logs /app/exports /app/uploads /app/celerybeat
 USER appuser
 
 # Expose port
