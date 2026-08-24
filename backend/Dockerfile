@@ -27,7 +27,11 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
+# Exclude .env file - docker-compose will provide env vars
 COPY . .
+
+# Remove .env if it exists (docker-compose provides env vars)
+RUN if [ -f .env ]; then mv .env .env.local.example; fi
 
 # Create necessary directories
 RUN mkdir -p /app/logs /app/exports /app/uploads /app/celerybeat
