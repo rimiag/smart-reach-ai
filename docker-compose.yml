@@ -46,13 +46,13 @@ services:
         condition: service_healthy
     networks:
       - leadgen-network
-    healthcheck:
-      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
-      interval: 30s
-      timeout: 10s
-      start_period: 40s
-      retries: 3
-    restart: unless-stopped
+    #healthcheck:
+     # test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
+     # interval: 30s
+      #timeout: 10s
+      #start_period: 40s
+      #retries: 3
+    #restart: unless-stopped
 
   # Celery Worker - Background tasks
   worker:
@@ -108,13 +108,13 @@ services:
         condition: service_started
     networks:
       - leadgen-network
-    healthcheck:
-      test: ["CMD", "celery", "-A", "app.tasks.celery_app", "inspect", "ping"]
-      interval: 30s
-      timeout: 10s
-      start_period: 40s
-      retries: 3
-    restart: unless-stopped
+    #healthcheck:
+     # test: ["CMD", "celery", "-A", "app.tasks.celery_app", "inspect", "ping"]
+     # interval: 30s
+      #timeout: 10s
+      #start_period: 40s
+      #retries: 3
+    #restart: unless-stopped
 
   # Flower - Celery monitoring (optional)
   flower:
