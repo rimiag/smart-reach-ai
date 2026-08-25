@@ -118,10 +118,7 @@ async def run_migrations():
     print_header("Running Database Migrations")
     from alembic.config import Config
     from alembic import command
-    from alembic.runtime.environment import EnvironmentContext
     from app.core.config import settings
-    from sqlalchemy import create_engine
-    import asyncio
 
     def get_sync_url():
         """Convert async URL to sync URL for Alembic."""
@@ -137,48 +134,20 @@ async def run_migrations():
         sync_url = get_sync_url()
         config.set_main_option("sqlalchemy.url", sync_url)
 
-        # Create sync engine for Alembic
-        sync_engine = create_engine(sync_url)
+        # Display current revision
+        try:
+            command.current(config)
+        except Exception as e:
+            print_info(f"Could not determine current revision: {e}")
 
-        # Check current version
-        def check_version(rev, context):
-            if rev:
-                print_info(f"Current revision: {rev}")
-            else:
-                print_info("No current revision - database is new")
-            return []
+        # Run migrations
+        print_info("Running migration upgrade to head...")
+        command.upgrade(config, "head")
 
-        with EnvironmentContext(config):
-            from alembic.script import ScriptDirectory
-            script = ScriptDirectory.from_config(config)
+        # Display final revision
+        command.current(config)
 
-            # Run upgrade
-            def upgrade(rev, context):
-                print("Running migration upgrade...")
-                return script._upgrade_revs("head", rev)
-
-            with sync_engine.begin() as connection:
-                config.attributes['connection'] = connection
-                command.upgrade(config, "head")
-
-        # Verify migration completed
-        def get_current_rev(rev, context):
-            if rev:
-                print_success(f"Migrations completed. Current revision: {rev}")
-            else:
-                print_info("No migrations to run")
-            return []
-
-        with sync_engine.begin() as connection:
-            from alembic.runtime.migration import MigrationContext
-            migration_context = MigrationContext(config.configure(connection=connection))
-            final_rev = migration_context.get_current_revision()
-
-        if final_rev:
-            print_success(f"Migrations completed. Current revision: {final_rev}")
-        else:
-            print_info("No migrations were run")
-
+        print_success("Migrations completed successfully!")
         return True
 
     except Exception as e:
