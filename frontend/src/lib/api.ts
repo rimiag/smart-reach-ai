@@ -118,6 +118,23 @@ export const api = {
   // Leads
   getLeads: (params?: Record<string, unknown>) =>
     apiClient.get('/leads', { params }),
+  createLead: (data: {
+    organization_name: string;
+    website: string;
+    email?: string;
+    phone?: string;
+    campaign_id: number;
+    keyword: string;
+    source_url: string;
+    contact_page_url?: string;
+    contact_name?: string;
+    job_title?: string;
+    department?: string;
+    country?: string;
+    city?: string;
+    lead_score?: number;
+    ai_reasoning?: string;
+  }) => apiClient.post('/leads', data),
   getLead: (id: number) => apiClient.get(`/leads/${id}`),
   updateLead: (id: number, data: Record<string, unknown>) =>
     apiClient.put(`/leads/${id}`, data),

@@ -102,6 +102,24 @@ export interface Lead {
   notes?: string;
 }
 
+export interface LeadCreate {
+  organization_name: string;
+  website: string;
+  email?: string;
+  phone?: string;
+  campaign_id: number;
+  keyword: string;
+  source_url: string;
+  contact_page_url?: string;
+  contact_name?: string;
+  job_title?: string;
+  department?: string;
+  country?: string;
+  city?: string;
+  lead_score?: number;
+  ai_reasoning?: string;
+}
+
 // -----------------------------------------------------------------------------
 // Email Types
 // -----------------------------------------------------------------------------
