@@ -30,11 +30,14 @@ services:
     ports:
       - "8000:8000"
     environment:
+      # Signal to skip local .env file
+      - ENV_FILE=docker
+
       # Application
       - ENVIRONMENT=development
       - APP_NAME=AI Lead Generation Platform
-      - API_URL=http://localhost:8000
-      - FRONTEND_URL=http://localhost:3000
+      - API_URL=http://192.168.1.30:8000
+      - FRONTEND_URL=http://192.168.1.30:3000
 
       # Security
       - SECRET_KEY=docker-dev-secret-key-change-in-production

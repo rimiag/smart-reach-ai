@@ -4,6 +4,7 @@ Application Configuration Module
 Manages all environment-based configuration settings using Pydantic Settings.
 All sensitive values are loaded from environment variables with proper defaults.
 """
+import os
 from functools import lru_cache
 from typing import List
 
@@ -14,8 +15,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
+    # Only load .env file if not in Docker (check for env_file override)
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=".env" if not os.getenv("ENV_FILE") else None,
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
