@@ -52,7 +52,7 @@ services:
       - REDIS_CACHE_TTL=3600
 
       # CORS
-      - CORS_ORIGINS=http://frontend:3000,http://localhost:3000,http://backend:8000,http://192.168.1.30:3000
+      - CORS_ORIGINS=http://frontend:3000,http://localhost:3000,http://192.168.1.30:3000,http://backend:8000,http://192.168.1.30:8000
 
       # Celery
       - CELERY_BROKER_URL=redis://redis:6379/0
