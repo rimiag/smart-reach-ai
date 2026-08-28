@@ -113,7 +113,7 @@ jobs:
             echo "::error::/opt/smart-reach-ai-staging/.staging.env is missing - create it from .staging.env.example (see CICD_SETUP.md)"
             exit 1
           fi
-          sudo cp /opt/smart-reach-ai-staging/.staging.env ./.staging.env
+          cp /opt/smart-reach-ai-staging/.staging.env ./.staging.env
 
       - name: Log in to GHCR
         env:
