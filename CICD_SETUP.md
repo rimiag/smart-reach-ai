@@ -1,93 +1,89 @@
 # CI/CD Setup Guide — SmartReach AI
 
-One push to `main` = lint → type-check/build → GHCR images → automatic staging deploy on your Ubuntu VM, with every deployment pinned to the exact commit that passed checks.
+One push to `main` = backend image build + frontend image build + automatic
+deploy to the staging VM (**192.168.1.30**). Nothing else — no PR checks, no
+dependency bots, no vulnerability scanners.
 
-## Architecture
+## How it works
 
 ```
-PR ──► backend-checks + frontend-checks          (GitHub-hosted runners)
-           │ merge to main
-           ▼
-       build-backend / build-frontend            → ghcr.io/<owner>/smart-reach-ai-{backend,frontend}
-           │                                       tagged sha-<short> (immutable) + latest
-           ▼
-       deploy-staging                            (self-hosted runner on the staging VM)
-           • copies /opt/smart-reach-ai-staging/.staging.env into the fresh checkout
-           • sources it, pulls sha-tagged images, `docker compose up -d`
-           • polls /health + frontend until healthy
+push to main
+   ├─ build backend image  → ghcr.io/rimiag/smart-reach-ai-backend:sha-<short> (+ latest)
+   ├─ build frontend image → ghcr.io/rimiag/smart-reach-ai-frontend:sha-<short> (+ latest)
+   └─ deploy               → runs ON the staging VM (self-hosted runner)
+         • copies /opt/smart-reach-ai-staging/.staging.env into the fresh checkout
+         • sources it, pulls the sha-tagged images, `docker compose up -d`
+         • polls backend /health + frontend until healthy
 ```
 
-The runner lives **on** the staging VM and dials *out* to GitHub — no SSH port needs to be reachable from the internet.
+The runner lives on the VM and dials OUT to GitHub — the VM keeps no inbound
+internet access. GitHub's cloud runners cannot reach `192.168.1.30` (private
+LAN IP), which is exactly why the runner must run on the VM itself.
+
+Rollback: Actions → older green run → **Re-run all jobs** (images are pinned
+per commit, so nothing newer leaks in).
 
 ## One-time setup
 
-### A. GitHub repository configuration
+### GitHub (Settings → Secrets and variables → Actions)
 
 | Item | Where | Value |
 |------|-------|-------|
-| Variable | Settings → Secrets and variables → Actions → Variables | `NEXT_PUBLIC_API_URL` = e.g. `http://<STAGING_VM_IP>:8000` |
-| Environment | Settings → Environments → new `staging` | no reviewers = auto-deploy; add "Required reviewers" later to require approval |
-| Secret (optional) | Actions secrets | `GHCR_PAT` — PAT with `read:packages` for pulling private images |
+| Variable | Variables tab | `NEXT_PUBLIC_API_URL` = `http://192.168.1.30:8000` — baked into the frontend bundle at build time, so set it BEFORE the first build (the workflow falls back to exactly this URL if unset) |
+| Secret (optional) | Secrets tab | `GHCR_PAT` — PAT with `read:packages`, only needed if the GHCR packages are private and the VM hasn't run `docker login ghcr.io` |
 
-> **Important:** set `NEXT_PUBLIC_API_URL` **before** the first image build. Next.js bakes `NEXT_PUBLIC_*`
-> into the client bundle at build time — changing it later requires a rebuild.
-
-### B. Staging VM bootstrap (Ubuntu)
+### Staging VM (192.168.1.30, Ubuntu)
 
 ```bash
 # 1. Docker Engine + compose plugin
 curl -fsSL https://get.docker.com | sh
-sudo usermod -aG docker $USER   # re-login afterwards
+sudo usermod -aG docker $USER        # then log out & back in
 
-# 2. Deploy directory
+# 2. Deployment secrets (never committed)
 sudo mkdir -p /opt/smart-reach-ai-staging
-sudo chown -R $USER /opt/smart-reach-ai-staging
+sudo cp .staging.env.example /opt/smart-reach-ai-staging/.staging.env
+sudo nano /opt/smart-reach-ai-staging/.staging.env   # real SECRET_KEY, DB passwords, OPENAI_API_KEY ...
 
-# 3. Deployment secrets - create once, never committed
-cp .staging.env.example /opt/smart-reach-ai-staging/.staging.env   # then edit real values!
-nano /opt/smart-reach-ai-staging/.staging.env                      # SECRET_KEY, MYSQL_ROOT_PASSWORD, OPENAI_API_KEY ...
+# 3. GHCR login - only if packages are private and no GHCR_PAT secret is set
+echo "<PAT-with-read:packages>" | docker login ghcr.io -u rimiag --password-stdin
 
-# 4. GHCR login for pulling private images (skip if you set the GHCR_PAT secret)
-echo "<PAT-read_packages>" | docker login ghcr.io -u <github-user> --password-stdin
-
-# 5. GitHub self-hosted runner (repo Settings → Actions → Runners → New)
+# 4. Self-hosted runner (repo Settings → Actions → Runners → New self-hosted runner)
 mkdir ~/actions-runner && cd ~/actions-runner
-# ...download/link/configure per the on-screen instructions:
-./config.sh --url https://github.com/rimiag/smart-reach-ai --token <TOKEN> --labels staging
-sudo ./svc.sh install && sudo ./svc.sh start        # runs deploys unattended incl. after reboot
+# ...download/link per the on-screen instructions, then:
+./config.sh --url https://github.com/rimiag/smart-reach-ai --token <RUNNER_TOKEN> --labels staging
+sudo ./svc.sh install && sudo ./svc.sh start     # survives reboots
 ```
 
-Runner user must be in the `docker` group (step 1) — the deploy job runs `docker compose` directly.
+The runner's user must be in the `docker` group (step 1) — the deploy job runs
+`docker compose` directly against the local daemon.
 
-## How the pipeline works
+## Daily use
 
-1. **backend-checks** – Python 3.11, installs `requirements.txt`, enforces `black`/`isort`, smoke-imports `app.main`.
-2. **frontend-checks** – Node 20, `npm ci`, `tsc --noEmit`, production `next build`.
-3. **build-backend / build-frontend** (push to `main` only) – Buildx with GHA layer cache, pushes to GHCR as `sha-<short>` + `latest`; Trivy scans each image (report-only).
-4. **deploy-staging** (needs both builds) – runs `docker compose up -d` straight from the fresh checkout of that commit (so compose always matches the code), sources `.staging.env`, recreates services pinned to `IMAGE_TAG=sha-<short>`, then health-gates `/health` and `/`.
-
-## Operating
-
-- **Redeploy same commit:** Actions → latest run → Re-run `Deploy to staging VM`.
-- **Rollback:** open the previous green run → Re-run `Deploy to staging VM`. Or manually:
-  from any clone of the repo: `git checkout <old-sha> && export IMAGE_TAG=sha-old1234 && docker compose up -d`
-- **Flower monitoring:** `docker compose up -d` (included; UI on port 5555)
-- **Logs:** `docker compose logs -f [service]`
+| Task | How |
+|------|-----|
+| Deploy | Push to `main`. Watch it under the **Build and Deploy** workflow. |
+| Redeploy same commit | Actions → the run → **Re-run all jobs** |
+| Rollback | Actions → older green run → **Re-run all jobs** |
+| Logs on the VM | `docker ps` / `docker logs -f <container>` |
+| Manage the stack on the VM | `cd` into the runner's checkout dir (under `~/actions-runner/_work/...`) and use `docker compose` normally |
 
 ## Troubleshooting
 
 | Symptom | Fix |
 |---------|-----|
-| Deploy job queued forever | Runner offline → on VM: `sudo ./svc.sh status` / restart it |
-| Deploy can't pull images | GHCR auth: login during bootstrap or set `GHCR_PAT` secret |
-| Frontend calls wrong API host | Repo variable `NEXT_PUBLIC_API_URL` missing/wrong at build time → fix variable, rebuild images |
-| `_staging.env is missing` error | Create `/opt/smart-reach-ai-staging/.staging.env` from `.staging.env.example` |
-| Health check times out | `docker compose logs backend` on the VM; DB may still be migrating on first boot (start_period=60s) |
+| Deploy job queued forever | Runner offline → on the VM: `sudo ./svc.sh status`, restart it |
+| Deploy can't pull images | GHCR auth: run `docker login ghcr.io` on the VM or set the `GHCR_PAT` secret |
+| `.staging.env is missing` error | Create `/opt/smart-reach-ai-staging/.staging.env` from `.staging.env.example` |
+| Frontend talks to the wrong API host | `NEXT_PUBLIC_API_URL` repo variable was missing/wrong when images were built → fix variable, re-run the workflow |
+| Health check times out | `docker logs backend` on the VM — first boot also creates DB tables (start period 60 s) |
 
-## Recommended follow-ups
+## Notes
 
-1. Add branch protection on `main` requiring the two check jobs.
-2. First PRs will surface Dependabot bumps — review weekly batches.
-3. Real `tests/` directory (pytest config already expects `testpaths=["tests"]`) so CI gates behavior, not just imports.
-4. Revisit Alembic once schema changes begin (`init_db` creates tables but cannot evolve them).
-5. flake8/mypy are configured but not yet gating in CI (existing debt); tighten later.
+- Dependabot has been **removed** (it was opening the flood of upgrade PRs).
+  Its existing PRs will be auto-closed once this lands on `main`; anything left
+  over: `gh pr list --state open` then close, or close them in the web UI.
+- The "Security" tab alerts come from GitHub's dependency scanning — harmless
+  to leave on, or disable under Settings → Code security.
+- When real tests exist, a `pytest` job can be added ahead of the builds.
+- Revisit Alembic before real data accumulates (`init_db` creates tables but
+  cannot evolve an existing schema).
