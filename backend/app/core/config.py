@@ -4,6 +4,7 @@ Application Configuration Module
 Manages all environment-based configuration settings using Pydantic Settings.
 All sensitive values are loaded from environment variables with proper defaults.
 """
+
 import os
 from functools import lru_cache
 from typing import List
@@ -36,7 +37,7 @@ class Settings(BaseSettings):
     # -----------------------------------------------------------------------------
     secret_key: str = Field(
         default="change-this-secret-key-in-production",
-        description="Secret key for JWT signing. Change in production!"
+        description="Secret key for JWT signing. Change in production!",
     )
     access_token_expire_minutes: int = Field(default=30, description="Access token TTL in minutes")
     refresh_token_expire_days: int = Field(default=7, description="Refresh token TTL in days")
@@ -49,9 +50,11 @@ class Settings(BaseSettings):
         """Generate a default encryption key if not provided (dev only)."""
         if not v:
             import os
+
             env = os.getenv("ENVIRONMENT", "development")
             if env == "development":
                 from cryptography.fernet import Fernet
+
                 return Fernet.generate_key().decode()
         return v
 
@@ -116,9 +119,7 @@ class Settings(BaseSettings):
     # Email Providers - Microsoft Graph
     # -----------------------------------------------------------------------------
     microsoft_client_id: str = Field(default="", description="Microsoft OAuth2 client ID")
-    microsoft_client_secret: str = Field(
-        default="", description="Microsoft OAuth2 client secret"
-    )
+    microsoft_client_secret: str = Field(default="", description="Microsoft OAuth2 client secret")
     microsoft_tenant_id: str = Field(default="common", description="Microsoft tenant ID")
     microsoft_redirect_uri: str = Field(
         default="http://localhost:3000/auth/microsoft/callback",
@@ -155,9 +156,7 @@ class Settings(BaseSettings):
     # Search Providers - Google
     # -----------------------------------------------------------------------------
     google_search_api_key: str = Field(default="", description="Google Search API key")
-    google_search_engine_id: str = Field(
-        default="", description="Google Custom Search Engine ID"
-    )
+    google_search_engine_id: str = Field(default="", description="Google Custom Search Engine ID")
 
     # -----------------------------------------------------------------------------
     # Search Providers - SerpAPI

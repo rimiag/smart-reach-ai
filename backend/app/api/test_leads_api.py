@@ -14,11 +14,12 @@ Tests all 9 lead API endpoints:
 
 Run after starting FastAPI server: uvicorn app.main:app --reload --port 8000
 """
+
 import asyncio
-import requests
 import json
 import sys
 
+import requests
 
 BASE_URL = "http://localhost:8000/api/v1"
 
@@ -37,8 +38,7 @@ def test_leads_api():
         # 1. Register/Login
         print("\n[1/10] Testing authentication...")
         response = requests.post(
-            f"{BASE_URL}/auth/login",
-            json={"email": email, "password": password}
+            f"{BASE_URL}/auth/login", json={"email": email, "password": password}
         )
 
         if response.status_code == 401:
@@ -46,14 +46,13 @@ def test_leads_api():
             print("      User not found, registering...")
             response = requests.post(
                 f"{BASE_URL}/auth/register",
-                json={"email": email, "password": password, "name": "Test User"}
+                json={"email": email, "password": password, "name": "Test User"},
             )
             if response.status_code == 201:
                 print("      ✅ User registered")
                 # Login again
                 response = requests.post(
-                    f"{BASE_URL}/auth/login",
-                    json={"email": email, "password": password}
+                    f"{BASE_URL}/auth/login", json={"email": email, "password": password}
                 )
 
         if response.status_code == 200:
@@ -75,8 +74,8 @@ def test_leads_api():
             json={
                 "name": "Test Leads Campaign",
                 "description": "Campaign for API testing",
-                "keywords": ["test", "api", "leads"]
-            }
+                "keywords": ["test", "api", "leads"],
+            },
         )
 
         if response.status_code == 201:
@@ -101,8 +100,8 @@ def test_leads_api():
                 "website": "https://example.com",
                 "contact_name": "John Doe",
                 "email": "john@example.com",
-                "lead_score": 75
-            }
+                "lead_score": 75,
+            },
         )
 
         if response.status_code == 201:
@@ -119,9 +118,7 @@ def test_leads_api():
         # 4. List leads
         print("\n[4/10] Listing leads...")
         response = requests.get(
-            f"{BASE_URL}/leads",
-            headers=headers,
-            params={"campaign_id": campaign_id}
+            f"{BASE_URL}/leads", headers=headers, params={"campaign_id": campaign_id}
         )
 
         if response.status_code == 200:
@@ -132,10 +129,7 @@ def test_leads_api():
 
         # 5. Get lead details
         print("\n[5/10] Getting lead details...")
-        response = requests.get(
-            f"{BASE_URL}/leads/{lead_id}",
-            headers=headers
-        )
+        response = requests.get(f"{BASE_URL}/leads/{lead_id}", headers=headers)
 
         if response.status_code == 200:
             lead_detail = response.json()
@@ -150,7 +144,7 @@ def test_leads_api():
         response = requests.put(
             f"{BASE_URL}/leads/{lead_id}",
             headers=headers,
-            json={"phone": "+1-555-9999", "job_title": "Senior Manager"}
+            json={"phone": "+1-555-9999", "job_title": "Senior Manager"},
         )
 
         if response.status_code == 200:
@@ -163,10 +157,7 @@ def test_leads_api():
 
         # 7. Approve lead
         print("\n[7/10] Approving lead...")
-        response = requests.post(
-            f"{BASE_URL}/leads/{lead_id}/approve",
-            headers=headers
-        )
+        response = requests.post(f"{BASE_URL}/leads/{lead_id}/approve", headers=headers)
 
         if response.status_code == 200:
             result = response.json()
@@ -186,8 +177,8 @@ def test_leads_api():
                 "source_url": "https://example2.com",
                 "organization_name": "Test Org 2",
                 "website": "https://example2.com",
-                "lead_score": 80
-            }
+                "lead_score": 80,
+            },
         )
 
         lead2_id = None
@@ -196,9 +187,7 @@ def test_leads_api():
 
             # Bulk approve
             response = requests.post(
-                f"{BASE_URL}/leads/bulk-approve",
-                headers=headers,
-                json={"ids": [lead2_id]}
+                f"{BASE_URL}/leads/bulk-approve", headers=headers, json={"ids": [lead2_id]}
             )
             if response.status_code == 200:
                 result = response.json()
@@ -219,8 +208,8 @@ def test_leads_api():
                 "source_url": "https://example3.com",
                 "organization_name": "Test Org 3",
                 "website": "https://example3.com",
-                "lead_score": 60
-            }
+                "lead_score": 60,
+            },
         )
 
         lead3_id = None
@@ -229,9 +218,7 @@ def test_leads_api():
 
             # Bulk reject
             response = requests.post(
-                f"{BASE_URL}/leads/bulk-reject",
-                headers=headers,
-                json={"ids": [lead3_id]}
+                f"{BASE_URL}/leads/bulk-reject", headers=headers, json={"ids": [lead3_id]}
             )
             if response.status_code == 200:
                 result = response.json()
@@ -243,10 +230,7 @@ def test_leads_api():
 
         # 10. Delete lead
         print("\n[10/10] Deleting lead...")
-        response = requests.delete(
-            f"{BASE_URL}/leads/{lead_id}",
-            headers=headers
-        )
+        response = requests.delete(f"{BASE_URL}/leads/{lead_id}", headers=headers)
 
         if response.status_code == 204:
             print("      ✅ Lead deleted")
@@ -274,6 +258,7 @@ def test_leads_api():
     except Exception as e:
         print(f"\n❌ ERROR: {e}")
         import traceback
+
         traceback.print_exc()
 
 

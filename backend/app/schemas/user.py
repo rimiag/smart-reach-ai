@@ -3,6 +3,7 @@ User Schemas
 
 Pydantic models for user-related requests and responses.
 """
+
 from datetime import datetime
 from typing import Optional
 
@@ -26,7 +27,10 @@ class UserCreate(UserBase):
     """Schema for user registration."""
 
     password: str = Field(
-        ..., min_length=8, max_length=72, description="User password (max 72 characters for bcrypt compatibility)"
+        ...,
+        min_length=8,
+        max_length=72,
+        description="User password (max 72 characters for bcrypt compatibility)",
     )
 
 
@@ -48,9 +52,7 @@ class UserUpdatePassword(BaseModel):
     """Schema for password change."""
 
     current_password: str = Field(..., description="Current password")
-    new_password: str = Field(
-        ..., min_length=8, max_length=100, description="New password"
-    )
+    new_password: str = Field(..., min_length=8, max_length=100, description="New password")
 
 
 # -----------------------------------------------------------------------------

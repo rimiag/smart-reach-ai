@@ -13,23 +13,22 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
-
 # Lead status enum
 LEAD_STATUS = ENUM(
-    "new",            # Just discovered
-    "researching",    # Being processed
-    "qualified",      # AI qualified
-    "review",         # Ready for human review
-    "approved",       # Approved for outreach
-    "rejected",       # Rejected by user
-    "scheduled",      # Email scheduled
-    "sent",            # Email sent
-    "replied",        # Got a reply
-    "interested",     # Expressed interest
-    "not_interested", # Not interested
-    "unsubscribed",   # Unsubscribed
-    "bounced",        # Email bounced
-    "do_not_contact", # Blocked
+    "new",  # Just discovered
+    "researching",  # Being processed
+    "qualified",  # AI qualified
+    "review",  # Ready for human review
+    "approved",  # Approved for outreach
+    "rejected",  # Rejected by user
+    "scheduled",  # Email scheduled
+    "sent",  # Email sent
+    "replied",  # Got a reply
+    "interested",  # Expressed interest
+    "not_interested",  # Not interested
+    "unsubscribed",  # Unsubscribed
+    "bounced",  # Email bounced
+    "do_not_contact",  # Blocked
     name="lead_status",
 )
 

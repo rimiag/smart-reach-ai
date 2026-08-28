@@ -37,13 +37,13 @@ class JSONText(TypeDecorator):
 
 # Campaign status enum
 CAMPAIGN_STATUS = ENUM(
-    'draft',
-    'researching',
-    'ready',
-    'active',
-    'paused',
-    'completed',
-    name='campaign_status',
+    "draft",
+    "researching",
+    "ready",
+    "active",
+    "paused",
+    "completed",
+    name="campaign_status",
 )
 
 
@@ -65,7 +65,7 @@ class Campaign(Base):
 
     # Foreign Key
     user_id: Mapped[int] = mapped_column(
-        ForeignKey('users.id', ondelete='CASCADE'),
+        ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -84,7 +84,7 @@ class Campaign(Base):
     # Status
     status: Mapped[str] = mapped_column(
         CAMPAIGN_STATUS,
-        default='draft',
+        default="draft",
         nullable=False,
     )
 
@@ -139,8 +139,4 @@ class Campaign(Base):
     )
 
     def __repr__(self) -> str:
-        return (
-            f"<Campaign(id={self.id}, "
-            f"name={self.name}, "
-            f"status={self.status})>"
-        )
+        return f"<Campaign(id={self.id}, " f"name={self.name}, " f"status={self.status})>"

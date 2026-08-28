@@ -3,6 +3,7 @@ FastAPI Dependencies
 
 Reusable dependency functions for authentication, database sessions, etc.
 """
+
 from typing import Annotated, Optional
 
 from fastapi import Depends, Header, HTTPException, status

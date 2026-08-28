@@ -3,6 +3,7 @@ Lead Service
 
 Business logic for lead management.
 """
+
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -51,7 +52,7 @@ class LeadService:
             city=lead_data.city,
             lead_score=lead_data.lead_score,
             ai_reasoning=lead_data.ai_reasoning,
-            status='new',
+            status="new",
         )
 
         db.add(new_lead)
@@ -73,9 +74,7 @@ class LeadService:
             Lead or None
         """
         result = await db.execute(
-            select(Lead)
-            .options(selectinload(Lead.campaign))
-            .where(Lead.id == lead_id)
+            select(Lead).options(selectinload(Lead.campaign)).where(Lead.id == lead_id)
         )
         return result.scalar_one_or_none()
 
@@ -107,10 +106,7 @@ class LeadService:
             Tuple of (leads list, total count)
         """
         # Build base query
-        query = select(Lead).where(
-            Lead.campaign_id == campaign_id,
-            Lead.user_id == user_id
-        )
+        query = select(Lead).where(Lead.campaign_id == campaign_id, Lead.user_id == user_id)
 
         # Apply filters
         if status:
@@ -122,8 +118,7 @@ class LeadService:
 
         # Get total count
         count_query = select(func.count(Lead.id)).where(
-            Lead.campaign_id == campaign_id,
-            Lead.user_id == user_id
+            Lead.campaign_id == campaign_id, Lead.user_id == user_id
         )
         if status:
             count_query = count_query.where(Lead.status == status)
@@ -210,7 +205,7 @@ class LeadService:
         Returns:
             Lead: Updated lead
         """
-        lead.status = 'approved'
+        lead.status = "approved"
         lead.approved_at = datetime.now(timezone.utc)
 
         await db.commit()
@@ -233,7 +228,7 @@ class LeadService:
         Returns:
             Lead: Updated lead
         """
-        lead.status = 'rejected'
+        lead.status = "rejected"
 
         await db.commit()
         await db.refresh(lead)
@@ -266,10 +261,7 @@ class LeadService:
         for lead_id in lead_ids:
             try:
                 result = await db.execute(
-                    select(Lead).where(
-                        Lead.id == lead_id,
-                        Lead.user_id == user_id
-                    )
+                    select(Lead).where(Lead.id == lead_id, Lead.user_id == user_id)
                 )
                 lead = result.scalar_one_or_none()
 
@@ -278,12 +270,14 @@ class LeadService:
                     errors.append(f"Lead {lead_id} not found")
                     continue
 
-                if lead.status in ['approved', 'rejected', 'sent']:
+                if lead.status in ["approved", "rejected", "sent"]:
                     failed_count += 1
-                    errors.append(f"Lead {lead_id} has status '{lead.status}' and cannot be approved")
+                    errors.append(
+                        f"Lead {lead_id} has status '{lead.status}' and cannot be approved"
+                    )
                     continue
 
-                lead.status = 'approved'
+                lead.status = "approved"
                 lead.approved_at = datetime.now(timezone.utc)
                 success_count += 1
 
@@ -293,11 +287,7 @@ class LeadService:
 
         await db.commit()
 
-        return {
-            "success_count": success_count,
-            "failed_count": failed_count,
-            "errors": errors
-        }
+        return {"success_count": success_count, "failed_count": failed_count, "errors": errors}
 
     @staticmethod
     async def bulk_reject(
@@ -323,10 +313,7 @@ class LeadService:
         for lead_id in lead_ids:
             try:
                 result = await db.execute(
-                    select(Lead).where(
-                        Lead.id == lead_id,
-                        Lead.user_id == user_id
-                    )
+                    select(Lead).where(Lead.id == lead_id, Lead.user_id == user_id)
                 )
                 lead = result.scalar_one_or_none()
 
@@ -335,12 +322,14 @@ class LeadService:
                     errors.append(f"Lead {lead_id} not found")
                     continue
 
-                if lead.status in ['approved', 'rejected', 'sent']:
+                if lead.status in ["approved", "rejected", "sent"]:
                     failed_count += 1
-                    errors.append(f"Lead {lead_id} has status '{lead.status}' and cannot be rejected")
+                    errors.append(
+                        f"Lead {lead_id} has status '{lead.status}' and cannot be rejected"
+                    )
                     continue
 
-                lead.status = 'rejected'
+                lead.status = "rejected"
                 success_count += 1
 
             except Exception as e:
@@ -349,11 +338,7 @@ class LeadService:
 
         await db.commit()
 
-        return {
-            "success_count": success_count,
-            "failed_count": failed_count,
-            "errors": errors
-        }
+        return {"success_count": success_count, "failed_count": failed_count, "errors": errors}
 
 
 lead_service = LeadService()

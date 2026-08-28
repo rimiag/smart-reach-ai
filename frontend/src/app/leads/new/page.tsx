@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import type { Campaign } from '@/types';
 
-export default function NewLeadPage() {
+function NewLeadContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const campaignIdParam = searchParams.get('campaign_id');
@@ -415,5 +415,13 @@ export default function NewLeadPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function NewLeadPage() {
+  return (
+    <Suspense fallback={<main className="min-h-screen bg-gray-50 dark:bg-gray-900" />}>
+      <NewLeadContent />
+    </Suspense>
   );
 }

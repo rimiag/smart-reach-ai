@@ -3,6 +3,7 @@ Analytics API Endpoints
 
 Provides dashboard statistics and campaign analytics.
 """
+
 from fastapi import APIRouter
 
 router = APIRouter()

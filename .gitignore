@@ -69,3 +69,11 @@ Thumbs.db
 .git-backup/
 *.pack
 
+# =========================
+# CI/CD deployment secrets (server-side only)
+# =========================
+.staging.env
+
+
+# TypeScript incremental build cache
+frontend/tsconfig.tsbuildinfo

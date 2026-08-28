@@ -3,6 +3,7 @@ User Model
 
 Database model for user accounts and authentication.
 """
+
 from datetime import datetime
 from typing import Optional
 
@@ -25,9 +26,7 @@ class User(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
 
     # Authentication
-    email: Mapped[str] = mapped_column(
-        String(255), unique=True, nullable=False, index=True
-    )
+    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
 
     # Profile
@@ -46,9 +45,7 @@ class User(Base):
         onupdate=text("CURRENT_TIMESTAMP"),
         nullable=False,
     )
-    last_login: Mapped[Optional[datetime]] = mapped_column(
-        DateTime, nullable=True
-    )
+    last_login: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     # Status
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

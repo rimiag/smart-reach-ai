@@ -3,6 +3,7 @@ Common Schemas
 
 Shared Pydantic models used across multiple endpoints.
 """
+
 from typing import Any, Generic, List, TypeVar
 
 from pydantic import BaseModel

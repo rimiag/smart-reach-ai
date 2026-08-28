@@ -3,6 +3,7 @@ Leads API Endpoints
 
 Handles lead management, approval, rejection, and bulk operations.
 """
+
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -80,13 +81,13 @@ async def create_lead(
     Requires a valid campaign_id.
     """
     # Verify campaign ownership
-    from app.models.campaign import Campaign
     from sqlalchemy import select
+
+    from app.models.campaign import Campaign
 
     result = await db.execute(
         select(Campaign).where(
-            Campaign.id == lead_data.campaign_id,
-            Campaign.user_id == current_user.id
+            Campaign.id == lead_data.campaign_id, Campaign.user_id == current_user.id
         )
     )
     campaign = result.scalar_one_or_none()
@@ -133,8 +134,7 @@ async def get_lead(
 
     # Add campaign_name and create LeadDetailResponse
     return LeadDetailResponse(
-        **lead_data,
-        campaign_name=lead.campaign.name if lead.campaign else "Unknown"
+        **lead_data, campaign_name=lead.campaign.name if lead.campaign else "Unknown"
     )
 
 
@@ -226,7 +226,7 @@ async def approve_lead(
         )
 
     # Check if lead can be approved
-    if lead.status in ['approved', 'rejected', 'sent']:
+    if lead.status in ["approved", "rejected", "sent"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Cannot approve lead in '{lead.status}' status",
@@ -235,9 +235,7 @@ async def approve_lead(
     approved_lead = await lead_service.approve_lead(db, lead)
 
     return LeadActionResponse(
-        id=approved_lead.id,
-        status=approved_lead.status,
-        message="Lead approved successfully"
+        id=approved_lead.id, status=approved_lead.status, message="Lead approved successfully"
     )
 
 
@@ -268,7 +266,7 @@ async def reject_lead(
         )
 
     # Check if lead can be rejected
-    if lead.status in ['approved', 'rejected', 'sent']:
+    if lead.status in ["approved", "rejected", "sent"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Cannot reject lead in '{lead.status}' status",
@@ -277,9 +275,7 @@ async def reject_lead(
     rejected_lead = await lead_service.reject_lead(db, lead)
 
     return LeadActionResponse(
-        id=rejected_lead.id,
-        status=rejected_lead.status,
-        message="Lead rejected successfully"
+        id=rejected_lead.id, status=rejected_lead.status, message="Lead rejected successfully"
     )
 
 
@@ -298,14 +294,14 @@ async def bulk_approve_leads(
     result = await lead_service.bulk_approve(db, action_data.ids, current_user.id)
 
     message = f"Approved {result['success_count']} leads"
-    if result['failed_count'] > 0:
+    if result["failed_count"] > 0:
         message += f", {result['failed_count']} failed"
 
     return BulkActionResponse(
-        success_count=result['success_count'],
-        failed_count=result['failed_count'],
-        errors=result['errors'],
-        message=message
+        success_count=result["success_count"],
+        failed_count=result["failed_count"],
+        errors=result["errors"],
+        message=message,
     )
 
 
@@ -324,12 +320,12 @@ async def bulk_reject_leads(
     result = await lead_service.bulk_reject(db, action_data.ids, current_user.id)
 
     message = f"Rejected {result['success_count']} leads"
-    if result['failed_count'] > 0:
+    if result["failed_count"] > 0:
         message += f", {result['failed_count']} failed"
 
     return BulkActionResponse(
-        success_count=result['success_count'],
-        failed_count=result['failed_count'],
-        errors=result['errors'],
-        message=message
+        success_count=result["success_count"],
+        failed_count=result["failed_count"],
+        errors=result["errors"],
+        message=message,
     )

@@ -3,6 +3,7 @@ Authentication API Endpoints
 
 Handles user registration, login, token refresh, and user profile.
 """
+
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -19,8 +20,8 @@ from app.core.security import (
 from app.db.base import get_db
 from app.models.user import User
 from app.schemas.user import (
-    TokenResponse,
     TokenRefreshRequest,
+    TokenResponse,
     UserCreate,
     UserLogin,
     UserResponse,
@@ -67,6 +68,7 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
         raise
     except Exception as e:
         import traceback
+
         print(f"Registration error: {e}")
         print(traceback.format_exc())
         raise HTTPException(
@@ -102,6 +104,7 @@ async def login(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
 
         # Update last login
         from datetime import timezone
+
         user.last_login = datetime.now(timezone.utc)
         await db.commit()
 
@@ -121,6 +124,7 @@ async def login(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
         raise
     except Exception as e:
         import traceback
+
         print(f"Login error: {e}")
         print(traceback.format_exc())
         raise HTTPException(
@@ -211,7 +215,7 @@ async def get_current_user_profile(
 async def update_current_user(
     user_update: UserUpdate,
     db: AsyncSession = Depends(get_db),
-    credentials = Depends(security),
+    credentials=Depends(security),
 ):
     """
     Update current user profile.

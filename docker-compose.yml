@@ -1,20 +1,52 @@
-version: '3.8'
+# =============================================================================
+# SmartReach AI - Docker Compose (STAGING)
+# =============================================================================
+# This is the ONE deployment file: `docker-compose` == staging environment.
+# (Laptop development runs natively - backend/.venv + frontend npm dev - it
+# does not use this file.)
+#
+# Services run from images; CI/CD pins them to an exact commit via IMAGE_TAG
+# (e.g. sha-ab12cd3), so what runs on staging is exactly what passed checks.
+# All services also keep a `build:` section so a manual local build is still
+# possible if you ever need one (`docker compose build && up -d`).
+#
+# Configuration:
+#   ./.staging.env  -> required. Copy .staging.env.example and fill in real
+#                      values. Injected into containers (env_file) AND sourced
+#                      by deploys for ${...} interpolation below.
+#
+# Rollback: re-run an older "Deploy to staging VM" run in GitHub Actions,
+# or manually with a checkout of that commit:
+#   export IMAGE_TAG=sha-old1234 && docker compose up -d
+# =============================================================================
+
+name: smart-reach-ai-staging
+
+x-backend-env: &backend-env
+  ENV_FILE: docker
+  ENVIRONMENT: staging
+  DATABASE_URL: mariadb+aiomysql://${DB_USER:-leadgen_user}:${DB_PASSWORD:-leadgen_pass}@db:3306/${DB_NAME:-leadgen_db}
+  REDIS_URL: redis://redis:6379/0
+  CELERY_BROKER_URL: redis://redis:6379/0
+  CELERY_RESULT_BACKEND: redis://redis:6379/0
+  LOG_LEVEL: INFO
+  LOG_FORMAT: json
+  API_URL: ${API_URL:-http://localhost:8000}
+  FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+  CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
 
 services:
-  # Frontend - Next.js (Development Mode)
   frontend:
+    image: ghcr.io/rimiag/smart-reach-ai-frontend:${IMAGE_TAG:-latest}
     build:
       context: ./frontend
-      dockerfile: Dockerfile.dev
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://192.168.1.30:8000
-      - NODE_ENV=development
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-      - /app/.next
+      NODE_ENV: production
     depends_on:
       backend:
         condition: service_healthy
@@ -22,51 +54,17 @@ services:
       - leadgen-network
     restart: unless-stopped
 
-  # Backend - FastAPI
   backend:
+    image: ghcr.io/rimiag/smart-reach-ai-backend:${IMAGE_TAG:-latest}
     build:
       context: ./backend
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
+    env_file:
+      - ./.staging.env
     environment:
-      # Signal to skip local .env file
-      - ENV_FILE=docker
-
-      # Application
-      - ENVIRONMENT=development
-      - APP_NAME=AI Lead Generation Platform
-      - API_URL=http://192.168.1.30:8000
-      - FRONTEND_URL=http://192.168.1.30:3000
-
-      # Security
-      - SECRET_KEY=docker-dev-secret-key-change-in-production
-      - ACCESS_TOKEN_EXPIRE_MINUTES=30
-      - REFRESH_TOKEN_EXPIRE_DAYS=7
-
-      # Database (Docker internal network)
-      - DATABASE_URL=mariadb+aiomysql://leadgen_user:leadgen_pass@db:3306/leadgen_db
-      - DB_POOL_SIZE=20
-      - DB_MAX_OVERFLOW=10
-      - DB_POOL_TIMEOUT=30
-
-      # Redis (Docker internal network)
-      - REDIS_URL=redis://redis:6379/0
-      - REDIS_CACHE_TTL=3600
-
-      # CORS
-      - CORS_ORIGINS=http://frontend:3000,http://localhost:3000,http://192.168.1.30:3000,http://backend:8000,http://192.168.1.30:8000
-
-      # Celery
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
-
-      # Logging
-      - LOG_LEVEL=INFO
-      - LOG_FORMAT=json
-    volumes:
-      - ./backend:/app
-      - /app/.venv
+      <<: *backend-env
     depends_on:
       db:
         condition: service_healthy
@@ -82,34 +80,16 @@ services:
       retries: 5
     restart: unless-stopped
 
-  # Celery Worker - Background tasks
   worker:
+    image: ghcr.io/rimiag/smart-reach-ai-backend:${IMAGE_TAG:-latest}
     build:
       context: ./backend
       dockerfile: Dockerfile
     command: celery -A app.tasks.celery_app worker --loglevel=info --concurrency=2
+    env_file:
+      - ./.staging.env
     environment:
-      # Application
-      - ENVIRONMENT=development
-
-      # Security
-      - SECRET_KEY=docker-dev-secret-key-change-in-production
-
-      # Database (Docker internal network)
-      - DATABASE_URL=mariadb+aiomysql://leadgen_user:leadgen_pass@db:3306/leadgen_db
-
-      # Redis (Docker internal network)
-      - REDIS_URL=redis://redis:6379/0
-
-      # Celery
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
-
-      # Logging
-      - LOG_LEVEL=INFO
-    volumes:
-      - ./backend:/app
-      - /app/.venv
+      <<: *backend-env
     depends_on:
       backend:
         condition: service_healthy
@@ -125,34 +105,17 @@ services:
       retries: 3
     restart: unless-stopped
 
-  # Celery Beat - Scheduled tasks
   scheduler:
+    image: ghcr.io/rimiag/smart-reach-ai-backend:${IMAGE_TAG:-latest}
     build:
       context: ./backend
       dockerfile: Dockerfile
     command: celery -A app.tasks.celery_app beat --loglevel=info --schedule /tmp/celerybeat-schedule
+    env_file:
+      - ./.staging.env
     environment:
-      # Application
-      - ENVIRONMENT=development
-
-      # Security
-      - SECRET_KEY=docker-dev-secret-key-change-in-production
-
-      # Database (Docker internal network)
-      - DATABASE_URL=mariadb+aiomysql://leadgen_user:leadgen_pass@db:3306/leadgen_db
-
-      # Redis (Docker internal network)
-      - REDIS_URL=redis://redis:6379/0
-
-      # Celery
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
-
-      # Logging
-      - LOG_LEVEL=INFO
+      <<: *backend-env
     volumes:
-      - ./backend:/app
-      - /app/.venv
       - celerybeat-data:/tmp/celerybeat
     user: root
     depends_on:
@@ -172,8 +135,8 @@ services:
       retries: 3
     restart: unless-stopped
 
-  # Flower - Celery monitoring (optional)
   flower:
+    image: ghcr.io/rimiag/smart-reach-ai-backend:${IMAGE_TAG:-latest}
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -181,14 +144,9 @@ services:
     ports:
       - "5555:5555"
     environment:
-      # Application
-      - ENVIRONMENT=development
-
-      # Redis (Docker internal network)
-      - REDIS_URL=redis://redis:6379/0
-
-      # Celery
-      - CELERY_BROKER_URL=redis://redis:6379/0
+      ENVIRONMENT: staging
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
     depends_on:
       - redis
       - worker
@@ -196,30 +154,29 @@ services:
       - leadgen-network
     restart: unless-stopped
 
-  # MariaDB Database (compatible with version 10.1.x)
+  # MariaDB 10.1 (matches the version your data was built against)
   db:
     image: mariadb:10.1.48
     ports:
       - "3306:3306"
     environment:
-      - MYSQL_ROOT_PASSWORD=root_password_change_in_production
-      - MYSQL_DATABASE=leadgen_db
-      - MYSQL_USER=leadgen_user
-      - MYSQL_PASSWORD=leadgen_pass
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_password_change_in_production}
+      MYSQL_DATABASE: ${DB_NAME:-leadgen_db}
+      MYSQL_USER: ${DB_USER:-leadgen_user}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-leadgen_pass}
     volumes:
       - mysql_data:/var/lib/mysql
       - ./backend/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     networks:
       - leadgen-network
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot_password_change_in_production"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 30s
     restart: unless-stopped
 
-  # Redis - Celery broker and cache
   redis:
     image: redis:7-alpine
     ports:

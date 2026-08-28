@@ -3,6 +3,7 @@ Campaigns API Endpoints
 
 Handles campaign CRUD, research management, and statistics.
 """
+
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -66,9 +67,7 @@ async def create_campaign(
     Requires 5-10 keywords for lead generation.
     Campaign is created in 'draft' status.
     """
-    new_campaign = await campaign_service.create_campaign(
-        db, current_user.id, campaign_data
-    )
+    new_campaign = await campaign_service.create_campaign(db, current_user.id, campaign_data)
 
     return CampaignResponse.model_validate(new_campaign)
 
@@ -130,15 +129,13 @@ async def update_campaign(
         )
 
     # Check if campaign can be modified
-    if campaign.status not in ['draft', 'paused']:
+    if campaign.status not in ["draft", "paused"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Cannot modify campaign in '{campaign.status}' status",
         )
 
-    updated_campaign = await campaign_service.update_campaign(
-        db, campaign, campaign_data
-    )
+    updated_campaign = await campaign_service.update_campaign(db, campaign, campaign_data)
 
     return CampaignResponse.model_validate(updated_campaign)
 
@@ -171,7 +168,7 @@ async def delete_campaign(
         )
 
     # Check if campaign can be deleted
-    if campaign.status in ['researching', 'active']:
+    if campaign.status in ["researching", "active"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot delete active campaign. Pause or complete it first.",
@@ -208,7 +205,7 @@ async def start_research(
         )
 
     # Check if campaign is ready to start
-    if campaign.status != 'draft':
+    if campaign.status != "draft":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Cannot start campaign in '{campaign.status}' status",
@@ -216,9 +213,7 @@ async def start_research(
 
     # TODO: Will be implemented in Iteration 1.4 with Celery tasks
     # For now, just update the status
-    updated_campaign = await campaign_service.update_status(
-        db, campaign, 'researching'
-    )
+    updated_campaign = await campaign_service.update_status(db, campaign, "researching")
 
     return ResearchProgress(
         campaign_id=updated_campaign.id,
@@ -260,7 +255,7 @@ async def get_research_progress(
         campaign_id=campaign.id,
         status=campaign.status,
         current_step="Ready",
-        progress_percentage=0.0 if campaign.status == 'draft' else 100.0,
+        progress_percentage=0.0 if campaign.status == "draft" else 100.0,
         started_at=campaign.started_at,
     )
 

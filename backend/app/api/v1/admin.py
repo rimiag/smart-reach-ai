@@ -3,6 +3,7 @@ Admin API Endpoints
 
 Administrative functions for user management and system configuration.
 """
+
 from fastapi import APIRouter
 
 router = APIRouter()

@@ -3,15 +3,29 @@ Lead Schemas
 
 Pydantic models for lead-related requests and responses.
 """
+
 from datetime import datetime
 from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
 # Lead status literal type
-LeadStatus = Literal['new', 'researching', 'qualified', 'review', 'approved',
-                   'rejected', 'scheduled', 'sent', 'replied', 'interested',
-                   'not_interested', 'unsubscribed', 'bounced', 'do_not_contact']
+LeadStatus = Literal[
+    "new",
+    "researching",
+    "qualified",
+    "review",
+    "approved",
+    "rejected",
+    "scheduled",
+    "sent",
+    "replied",
+    "interested",
+    "not_interested",
+    "unsubscribed",
+    "bounced",
+    "do_not_contact",
+]
 
 
 # -----------------------------------------------------------------------------
@@ -20,7 +34,9 @@ LeadStatus = Literal['new', 'researching', 'qualified', 'review', 'approved',
 class LeadBase(BaseModel):
     """Base lead fields."""
 
-    organization_name: str = Field(..., min_length=1, max_length=255, description="Organization name")
+    organization_name: str = Field(
+        ..., min_length=1, max_length=255, description="Organization name"
+    )
     website: str = Field(..., min_length=1, max_length=255, description="Website URL")
     email: Optional[str] = Field(None, description="Contact email")
     phone: Optional[str] = Field(None, description="Contact phone number")
@@ -33,7 +49,9 @@ class LeadCreate(LeadBase):
     """Schema for creating a new lead."""
 
     campaign_id: int = Field(..., description="Campaign ID")
-    keyword: str = Field(..., min_length=1, max_length=255, description="Keyword that found this lead")
+    keyword: str = Field(
+        ..., min_length=1, max_length=255, description="Keyword that found this lead"
+    )
     source_url: str = Field(..., description="URL where lead was found")
     contact_page_url: Optional[str] = Field(None, description="Contact page URL")
     contact_name: Optional[str] = Field(None, max_length=255, description="Contact person name")

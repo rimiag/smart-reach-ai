@@ -3,11 +3,14 @@ Test Registration Script
 
 Debug script to test registration without FastAPI.
 """
+
 import asyncio
+
+from sqlalchemy import select
+
+from app.core.security import get_password_hash
 from app.db.base import AsyncSessionLocal
 from app.models.user import User
-from app.core.security import get_password_hash
-from sqlalchemy import select
 
 
 async def test_registration():
@@ -50,6 +53,7 @@ async def test_registration():
     except Exception as e:
         print(f"❌ Error during registration: {e}")
         import traceback
+
         traceback.print_exc()
 
 

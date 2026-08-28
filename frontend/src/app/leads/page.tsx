@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
@@ -16,7 +16,7 @@ interface LeadsResponse {
   pages: number;
 }
 
-export default function LeadsPage() {
+function LeadsContent() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const searchParams = useSearchParams();
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -260,5 +260,13 @@ export default function LeadsPage() {
         )}
       </div>
     </main>
+  );
+}
+
+export default function LeadsPage() {
+  return (
+    <Suspense fallback={<main className="min-h-screen bg-gray-50 dark:bg-gray-900" />}>
+      <LeadsContent />
+    </Suspense>
   );
 }

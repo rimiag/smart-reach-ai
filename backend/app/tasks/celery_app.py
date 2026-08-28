@@ -3,6 +3,7 @@ Celery Application Configuration
 
 Configures Celery for background task processing with Redis as broker.
 """
+
 from celery import Celery
 
 from app.core.config import settings

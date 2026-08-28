@@ -3,6 +3,7 @@ Suppression API Endpoints
 
 Manages the global suppression list for opt-outs and bounces.
 """
+
 from fastapi import APIRouter
 
 router = APIRouter()

@@ -3,6 +3,7 @@ Campaign Service
 
 Business logic for campaign management.
 """
+
 from datetime import datetime
 from typing import Optional
 
@@ -58,9 +59,7 @@ class CampaignService:
         Returns:
             Campaign or None
         """
-        result = await db.execute(
-            select(Campaign).where(Campaign.id == campaign_id)
-        )
+        result = await db.execute(select(Campaign).where(Campaign.id == campaign_id))
         return result.scalar_one_or_none()
 
     @staticmethod
@@ -164,9 +163,9 @@ class CampaignService:
         """
         campaign.status = status
 
-        if status == 'researching' and campaign.started_at is None:
+        if status == "researching" and campaign.started_at is None:
             campaign.started_at = datetime.utcnow()
-        elif status == 'completed' and campaign.completed_at is None:
+        elif status == "completed" and campaign.completed_at is None:
             campaign.completed_at = datetime.utcnow()
 
         await db.commit()

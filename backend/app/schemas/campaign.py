@@ -3,13 +3,14 @@ Campaign Schemas
 
 Pydantic models for campaign-related requests and responses.
 """
+
 from datetime import datetime
 from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
 # Campaign status literal type
-CampaignStatus = Literal['draft', 'researching', 'ready', 'active', 'paused', 'completed']
+CampaignStatus = Literal["draft", "researching", "ready", "active", "paused", "completed"]
 
 
 # -----------------------------------------------------------------------------
@@ -35,13 +36,13 @@ class CampaignCreate(CampaignBase):
         description="List of keywords (5-10 required)",
     )
 
-    @field_validator('keywords')
+    @field_validator("keywords")
     @classmethod
     def validate_keywords(cls, v: list[str]) -> list[str]:
         """Validate keywords are non-empty and trimmed."""
         keywords = [k.strip() for k in v if k.strip()]
         if len(keywords) < 5 or len(keywords) > 10:
-            raise ValueError('Must have between 5 and 10 keywords')
+            raise ValueError("Must have between 5 and 10 keywords")
         return keywords
 
 

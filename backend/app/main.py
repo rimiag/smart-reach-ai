@@ -3,6 +3,7 @@ FastAPI Application Entry Point
 
 Main application configuration including middleware, routers, and startup/shutdown events.
 """
+
 import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
@@ -11,11 +12,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
-from starlette.exceptions import HTTPException as StarletteHTTPException
 from sqlalchemy import text
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.api.v1 import admin, analytics, auth, campaigns, emails, leads, suppression
 from app.core.config import settings
-from app.api.v1 import auth, campaigns, leads, emails, suppression, analytics, admin
 from app.db.base import engine
 
 # -----------------------------------------------------------------------------

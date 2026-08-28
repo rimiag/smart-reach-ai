@@ -3,6 +3,7 @@ Security Module
 
 Handles password hashing, JWT token generation/validation, and API key encryption.
 """
+
 from datetime import datetime, timedelta
 from typing import Any, Optional
 
@@ -47,9 +48,9 @@ def get_password_hash(password: str) -> str:
         are truncated to the first 72 bytes before hashing.
     """
     # Truncate password to 72 bytes if needed (bcrypt limit)
-    password_bytes = password.encode('utf-8')
+    password_bytes = password.encode("utf-8")
     if len(password_bytes) > 72:
-        password = password_bytes[:72].decode('utf-8', errors='ignore')
+        password = password_bytes[:72].decode("utf-8", errors="ignore")
 
     return pwd_context.hash(password)
 

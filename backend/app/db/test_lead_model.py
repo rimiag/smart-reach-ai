@@ -3,14 +3,17 @@ Test Lead Model - Database Connection and Model Verification
 
 Tests the Lead model, relationships, and database operations.
 """
+
 import asyncio
 from datetime import datetime, timezone
-from app.db.base import AsyncSessionLocal
-from app.models.user import User
-from app.models.campaign import Campaign
-from app.models.lead import Lead
+
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
+
+from app.db.base import AsyncSessionLocal
+from app.models.campaign import Campaign
+from app.models.lead import Lead
+from app.models.user import User
 
 
 async def test_lead_model():
@@ -28,6 +31,7 @@ async def test_lead_model():
 
             if not user:
                 from app.core.security import get_password_hash
+
                 user = User(
                     email="test@example.com",
                     password_hash=get_password_hash("password123"),
@@ -115,7 +119,9 @@ async def test_lead_model():
             # 7. Test campaign relationship
             print("\n[7] Testing campaign relationship...")
             result = await db.execute(
-                select(Campaign).options(selectinload(Campaign.leads)).where(Campaign.id == campaign.id)
+                select(Campaign)
+                .options(selectinload(Campaign.leads))
+                .where(Campaign.id == campaign.id)
             )
             campaign_with_leads = result.scalar_one_or_none()
             lead_count = len(campaign_with_leads.leads) if campaign_with_leads else 0
@@ -135,6 +141,7 @@ async def test_lead_model():
     except Exception as e:
         print(f"\n❌ ERROR: {e}")
         import traceback
+
         traceback.print_exc()
 
 

@@ -3,6 +3,7 @@ Emails API Endpoints
 
 Handles email sending, templates, and event tracking.
 """
+
 from fastapi import APIRouter
 
 router = APIRouter()
