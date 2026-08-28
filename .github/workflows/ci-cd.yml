@@ -135,7 +135,7 @@ jobs:
 
       - name: Scan image with Trivy (report only)
         continue-on-error: true
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.REGISTRY }}/${{ steps.repo.outputs.lower }}-backend:${{ github.sha }}
           severity: HIGH,CRITICAL
@@ -198,7 +198,7 @@ jobs:
 
       - name: Scan image with Trivy (report only)
         continue-on-error: true
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.REGISTRY }}/${{ steps.repo.outputs.lower }}-frontend:${{ github.sha }}
           severity: HIGH,CRITICAL
