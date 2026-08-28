@@ -124,7 +124,7 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: ./backend
           push: true
@@ -185,7 +185,7 @@ jobs:
       # NOTE: NEXT_PUBLIC_* vars are baked into the JS bundle at BUILD time.
       # If you change NEXT_PUBLIC_API_URL you must rebuild the frontend image.
       - name: Build and push
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: ./frontend
           push: true
