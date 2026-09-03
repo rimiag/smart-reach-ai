@@ -164,6 +164,27 @@ class Settings(BaseSettings):
     serpapi_key: str = Field(default="", description="SerpAPI key")
 
     # -----------------------------------------------------------------------------
+    # Search & Discovery
+    # -----------------------------------------------------------------------------
+    search_provider: str = Field(
+        default="auto",
+        description="Preferred search provider: auto, bing, google or serpapi",
+    )
+    search_results_per_keyword: int = Field(
+        default=20, description="Maximum search results per keyword"
+    )
+    search_timeout: int = Field(default=30, description="Search provider request timeout (seconds)")
+    search_max_retries: int = Field(default=2, description="Retries per search provider request")
+    search_per_keyword_delay: float = Field(
+        default=1.0, description="Delay between keyword searches (seconds)"
+    )
+    search_blocked_domains: str = Field(
+        default="",
+        description="Comma-separated extra domains to exclude from results "
+        "(merged with the agent's built-in block list)",
+    )
+
+    # -----------------------------------------------------------------------------
     # Celery Configuration
     # -----------------------------------------------------------------------------
     celery_broker_url: str = Field(default="redis://redis:6379/0", description="Celery broker URL")

@@ -2,6 +2,21 @@
 
 A professional, scalable AI-powered B2B lead generation and outreach platform that discovers potential clients via web search, extracts public business contact information, uses AI to qualify and score leads, generates personalized outreach emails, and manages controlled email campaigns.
 
+## Implementation Status
+
+**Phase 1 (MVP) — ✅ COMPLETE**
+
+| Iteration | Scope | Status |
+|-----------|-------|--------|
+| 1.0 – 1.2 | Foundation: auth, campaigns, frontend | ✅ Complete |
+| 1.3 | Lead system (model, API, UI) | ✅ Complete |
+| 1.4 | Search & discovery (multi-provider search agent, live progress tracking) | ✅ Complete |
+| 1.5 | Crawling & extraction (robots.txt-compliant crawler, contact extraction, lead creation) | ✅ Complete |
+| 1.6 | Export (CSV/Excel/JSON) & campaign statistics | ✅ Complete |
+| Phase 2+ | AI qualification, email generation, sending & approval, analytics | ⬜ Not started |
+
+Details: [development_plan.md](development_plan.md), [PHASE1_COMPLETE.md](PHASE1_COMPLETE.md), per-iteration summaries ([1.4](ITERATION_1.4_COMPLETE.md), [1.5](ITERATION_1.5_COMPLETE.md), [1.6](ITERATION_1.6_COMPLETE.md)).
+
 ## Features
 
 - **Keyword-based Discovery**: Search for potential clients using 5-10 targeted keywords

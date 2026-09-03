@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import type { Lead } from '@/types';
 import Link from 'next/link';
 import Header from '@/components/Header';
+import ExportButton from '@/components/ExportButton';
 
 interface LeadsResponse {
   items: Lead[];
@@ -118,6 +119,7 @@ function LeadsContent() {
           <div className="flex gap-3">
             {campaignId && (
               <>
+                <ExportButton campaignId={campaignId} />
                 <Link
                   href={`/leads/new${campaignId ? `?campaign_id=${campaignId}` : ''}`}
                   className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-md transition-colors flex items-center gap-2"

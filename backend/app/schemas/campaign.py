@@ -95,18 +95,55 @@ class CampaignStats(BaseModel):
 
 
 # -----------------------------------------------------------------------------
+# Dashboard Statistics Schema
+# -----------------------------------------------------------------------------
+class DashboardStats(BaseModel):
+    """Aggregated statistics across all of a user's campaigns."""
+
+    campaigns_total: int = 0
+    campaigns_active: int = 0
+    leads_total: int = 0
+    leads_new: int = 0
+    leads_approved: int = 0
+    leads_rejected: int = 0
+    websites_discovered: int = 0
+    websites_crawled: int = 0
+
+
+class CampaignComparison(BaseModel):
+    """Per-campaign summary row for the dashboard comparison list."""
+
+    campaign_id: int
+    campaign_name: str
+    status: CampaignStatus
+    leads_total: int = 0
+    leads_new: int = 0
+    leads_approved: int = 0
+    websites_discovered: int = 0
+    created_at: datetime
+
+
+# -----------------------------------------------------------------------------
 # Research Progress Schema
 # -----------------------------------------------------------------------------
+# The campaign row itself uses CampaignStatus; a research run can additionally
+# surface a transient 'failed' state in progress reporting.
+ProgressStatus = Literal["draft", "researching", "ready", "active", "paused", "completed", "failed"]
+
+
 class ResearchProgress(BaseModel):
     """Research progress tracking."""
 
     campaign_id: int
-    status: CampaignStatus
+    status: ProgressStatus
     current_step: str
     progress_percentage: float
     websites_found: int = 0
     websites_crawled: int = 0
     contacts_found: int = 0
     leads_created: int = 0
+    keywords_total: int = 0
+    keywords_completed: int = 0
     started_at: Optional[datetime] = None
     estimated_completion: Optional[datetime] = None
+    error: Optional[str] = None

@@ -3,13 +3,15 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { api } from '@/lib/api';
-import type { Campaign } from '@/types';
+import type { Campaign, DashboardStats } from '@/types';
 import Link from 'next/link';
 import Header from '@/components/Header';
+import StatsCards from '@/components/StatsCards';
 
 export default function CampaignsPage() {
   const { isAuthenticated } = useAuth();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -20,6 +22,14 @@ export default function CampaignsPage() {
       try {
         const response = await api.getCampaigns();
         setCampaigns(response.data.items || []);
+
+        // Dashboard statistics (non-fatal if unavailable)
+        try {
+          const statsResponse = await api.getDashboardStats();
+          setStats(statsResponse.data as DashboardStats);
+        } catch {
+          // stats are additive - never block the campaign list on them
+        }
       } catch (err: unknown) {
         const axiosError = err as { response?: { data?: { error?: { message?: string } } } };
         const message = axiosError.response?.data?.error?.message || 'Failed to load campaigns';
@@ -61,6 +71,22 @@ export default function CampaignsPage() {
         {error && (
           <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 px-4 py-3 rounded-md mb-6">
             {error}
+          </div>
+        )}
+
+        {stats && !isLoading && (
+          <div className="mb-8">
+            <StatsCards
+              stats={[
+                { label: 'Campaigns', value: stats.campaigns_total },
+                { label: 'Active Now', value: stats.campaigns_active },
+                { label: 'Total Leads', value: stats.leads_total },
+                { label: 'New Leads', value: stats.leads_new },
+                { label: 'Approved', value: stats.leads_approved },
+                { label: 'Websites Found', value: stats.websites_discovered },
+                { label: 'Websites Crawled', value: stats.websites_crawled },
+              ]}
+            />
           </div>
         )}
 

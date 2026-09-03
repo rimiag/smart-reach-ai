@@ -87,3 +87,15 @@ The runner's user must be in the `docker` group (step 1) — the deploy job runs
 - When real tests exist, a `pytest` job can be added ahead of the builds.
 - Revisit Alembic before real data accumulates (`init_db` creates tables but
   cannot evolve an existing schema).
+
+### Frontend lockfile maintenance (Windows laptop → alpine container)
+
+The frontend image builds on Alpine (musl). A local `npm install` on Windows
+rewrites `package-lock.json` with Windows-only resolution and CI will fail with
+`Missing: @emnapi/... from lock file`. After any local dependency change,
+regenerate the lock for the container's platform before pushing:
+
+```bash
+cd frontend
+npx -y npm@11.19.0 install --package-lock-only --os=linux --cpu=x64 --libc=musl
+```

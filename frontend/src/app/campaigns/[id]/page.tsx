@@ -1,61 +1,86 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
+import { useParams } from 'next/navigation';
 import { api } from '@/lib/api';
-import type { Campaign } from '@/types';
+import type { Campaign, CampaignStats } from '@/types';
+import ResearchProgress from '@/components/ResearchProgress';
+import StatsCards from '@/components/StatsCards';
 import Link from 'next/link';
 
 export default function CampaignDetailPage() {
   const params = useParams();
-  const router = useRouter();
   const [campaign, setCampaign] = useState<Campaign | null>(null);
+  const [stats, setStats] = useState<CampaignStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [leadsCount, setLeadsCount] = useState<number>(0);
+  const [researchActive, setResearchActive] = useState(false);
+  const [isStartingResearch, setIsStartingResearch] = useState(false);
+
+  const fetchCampaign = useCallback(async () => {
+    try {
+      const response = await api.getCampaign(Number(params.id));
+      const data: Campaign = response.data;
+      setCampaign(data);
+      setResearchActive(data.status === 'researching');
+
+      // Campaign statistics (non-fatal if unavailable)
+      try {
+        const statsResponse = await api.getCampaignStats(data.id);
+        setStats(statsResponse.data as CampaignStats);
+      } catch {
+        // stats are additive - never block the page on them
+      }
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: { error?: { message?: string } } } };
+      const message = axiosError.response?.data?.error?.message || 'Failed to load campaign';
+      setError(message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [params.id]);
+
+  const fetchLeadsCount = useCallback(async () => {
+    if (!params.id) return;
+    try {
+      const response = await api.getLeads({ campaign_id: Number(params.id), per_page: 1 });
+      setLeadsCount(response.data.total || 0);
+    } catch (err) {
+      // Leads might not exist yet, that's okay
+      setLeadsCount(0);
+    }
+  }, [params.id]);
 
   useEffect(() => {
-    const fetchCampaign = async () => {
-      try {
-        const response = await api.getCampaign(Number(params.id));
-        setCampaign(response.data);
-      } catch (err: unknown) {
-        const axiosError = err as { response?: { data?: { error?: { message?: string } } } };
-        const message = axiosError.response?.data?.error?.message || 'Failed to load campaign';
-        setError(message);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    const fetchLeadsCount = async () => {
-      if (!params.id) return;
-      try {
-        const response = await api.getLeads({ campaign_id: Number(params.id), per_page: 1 });
-        setLeadsCount(response.data.total || 0);
-      } catch (err) {
-        // Leads might not exist yet, that's okay
-        setLeadsCount(0);
-      }
-    };
-
     if (params.id) {
       fetchCampaign();
       fetchLeadsCount();
     }
-  }, [params.id]);
+  }, [params.id, fetchCampaign, fetchLeadsCount]);
 
   const handleStartResearch = async () => {
     if (!campaign) return;
 
+    setIsStartingResearch(true);
     try {
       await api.startResearch(campaign.id);
-      router.push('/campaigns');
+      // Stay on this page and show live research progress.
+      setCampaign({ ...campaign, status: 'researching', started_at: new Date().toISOString() });
+      setResearchActive(true);
     } catch (err: unknown) {
       const axiosError = err as { response?: { data?: { error?: { message?: string } } } };
       const message = axiosError.response?.data?.error?.message || 'Failed to start research';
       setError(message);
+    } finally {
+      setIsStartingResearch(false);
     }
+  };
+
+  const handleResearchComplete = () => {
+    // Refresh campaign (status changed) and the leads count.
+    fetchCampaign();
+    fetchLeadsCount();
   };
 
   if (isLoading) {
@@ -196,19 +221,43 @@ export default function CampaignDetailPage() {
                   </Link>
                   <button
                     onClick={handleStartResearch}
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-md transition-colors"
+                    disabled={isStartingResearch}
+                    className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-6 py-2 rounded-md transition-colors"
                   >
-                    Start Research
+                    {isStartingResearch ? 'Starting...' : 'Start Research'}
                   </button>
                 </>
               )}
             </div>
           </div>
 
+          {stats && (
+            <div className="mt-6">
+              <StatsCards
+                stats={[
+                  { label: 'Websites Found', value: stats.websites_found },
+                  { label: 'Websites Crawled', value: stats.websites_crawled },
+                  { label: 'Contacts Found', value: stats.contacts_found },
+                  { label: 'Leads Created', value: stats.leads_created },
+                  { label: 'Emails Sent', value: stats.emails_sent },
+                  { label: 'Replies', value: stats.replies_received },
+                ]}
+              />
+            </div>
+          )}
+
+          {researchActive && campaign && (
+            <ResearchProgress
+              campaignId={campaign.id}
+              onComplete={handleResearchComplete}
+            />
+          )}
+
           <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
             <p className="text-sm text-blue-800 dark:text-blue-300">
-              <strong>Note:</strong> Full campaign functionality will be implemented in upcoming iterations.
-              Use Iteration 1.3 to create and manage campaigns.
+              <strong>Note:</strong> Starting research searches the web for each campaign
+              keyword, then politely crawls the discovered websites (respecting robots.txt)
+              to extract public contact details and create leads for your review.
             </p>
           </div>
         </div>

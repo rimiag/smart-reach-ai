@@ -93,9 +93,14 @@ export default function HomePage() {
           </div>
 
           <div className="mt-12 p-6 bg-blue-600 dark:bg-blue-700 rounded-lg shadow-lg text-white">
-            <p className="text-lg mb-2">Implementation Status</p>
+            <p className="text-lg mb-2">Implementation Status — Phase 1 MVP Complete ✅</p>
             <p className="text-blue-100">
-              ✓ Iteration 1.1: Project Setup &nbsp;•&nbsp; ✓ Iteration 1.2: Authentication &nbsp;•&nbsp; ✓ Iteration 1.3: Lead Management
+              ✓ 1.1 Project Setup &nbsp;•&nbsp; ✓ 1.2 Authentication &nbsp;•&nbsp; ✓ 1.3 Lead
+              Management &nbsp;•&nbsp; ✓ 1.4 Search &amp; Discovery &nbsp;•&nbsp; ✓ 1.5 Crawling
+              &amp; Extraction &nbsp;•&nbsp; ✓ 1.6 Export &amp; Statistics
+            </p>
+            <p className="text-blue-200 text-sm mt-2">
+              Next up: Phase 2 — AI Qualification &amp; Email Generation
             </p>
           </div>
         </div>

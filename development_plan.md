@@ -2,8 +2,8 @@
 
 **Project:** AI-Powered B2B Lead Generation & Outreach Platform
 **Version:** 0.1.0
-**Last Updated:** 2026-08-20
-**Status:** Iteration 1.3 Complete & Verified (~65% of Phase 1)
+**Last Updated:** 2026-08-31
+**Status:** PHASE 1 COMPLETE - All iterations (1.0-1.6) done & verified
 
 ---
 
@@ -13,7 +13,7 @@ SmartReach AI is an intelligent B2B lead generation platform that discovers pote
 
 **Current Progress:**
 - ✅ Foundation (Authentication, Campaign CRUD, Frontend)
-- ⏳ Phase 1 Core (40% complete)
+- ✅ Phase 1 Core (100% complete)
 - ❌ Phases 2-5 (Not started)
 
 **Architecture:**
@@ -33,9 +33,9 @@ Frontend (Next.js) → FastAPI Backend → MySQL Database
 |-------|-------|--------|----------|
 | **Foundation** | Auth, Campaigns | ✅ Complete | - |
 | **Iteration 1.3** | Lead System | ✅ Complete | 🔥 High |
-| **Iteration 1.4** | Search & Discovery | ❌ Not Started | 🔥 High |
-| **Iteration 1.5** | Crawling & Extraction | ❌ Not Started | 🔥 High |
-| **Iteration 1.6** | Export & Phase 1 Complete | ❌ Not Started | 🔥 High |
+| **Iteration 1.4** | Search & Discovery | ✅ Complete | 🔥 High |
+| **Iteration 1.5** | Crawling & Extraction | ✅ Complete | 🔥 High |
+| **Iteration 1.6** | Export & Phase 1 Complete | ✅ Complete | 🔥 High |
 | **Phase 2** | AI Qualification & Emails | ❌ Not Started | Medium |
 | **Phase 3** | Email Sending & Approval | ❌ Not Started | Medium |
 | **Phase 4** | Reply Detection & Analytics | ❌ Not Started | Low |
@@ -121,130 +121,64 @@ All lead management endpoints are working:
 
 ---
 
-## 🔥 PRIORITY - Iteration 1.4: Search & Discovery
+## ✅ COMPLETED - Iteration 1.4: Search & Discovery
 
-**Objective:** Create the lead database model and API for managing discovered leads.
+**Objective:** Implement web search integration to discover relevant websites based on keywords.
+**Completed:** 2026-08-31
+**Status:** ✅ Fully implemented and verified end-to-end
 
-### Database Schema
+### Implementation Summary
 
-```python
-# backend/app/models/lead.py
+| # | Task | File | Status |
+|---|------|------|--------|
+| 1.4.1 | Celery configuration | `backend/app/tasks/celery_app.py` | ✅ Verified task routing |
+| 1.4.2 | Search Agent | `backend/app/agents/search_agent.py` | ✅ Validation + dedup |
+| 1.4.3 | Bing Search API | `backend/app/integrations/bing_search.py` | ✅ + Google & SerpAPI providers |
+| 1.4.4 | Search task | `backend/app/tasks/search_tasks.py` | ✅ Celery + in-process dev fallback |
+| 1.4.5 | Campaign start endpoint | `backend/app/api/v1/campaigns.py` | ✅ Fail-fast when no provider |
+| 1.4.6 | Progress tracking | `backend/app/tasks/progress_tracker.py` | ✅ Redis-backed, degrades gracefully |
+| 1.4.7 | Research results model | `backend/app/models/research_result.py` | ✅ + migration `002_research_results.py` |
+| 1.4.8 | Frontend progress component | `frontend/src/components/ResearchProgress.tsx` | ✅ Live polling UI |
 
-class Lead(Base):
-    """Lead model for storing discovered business contacts."""
-    
-    __tablename__ = "leads"
-    
-    # Primary Key
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    
-    # Foreign Keys
-    campaign_id: Mapped[int] = mapped_column(ForeignKey('campaigns.id', ondelete='CASCADE'))
-    user_id: Mapped[int] = mapped_column(ForeignKey('users.id', ondelete='CASCADE'))
-    
-    # Source Information
-    keyword: Mapped[str] = mapped_column(String(255))  # Keyword that found this lead
-    source_url: Mapped[str] = mapped_column(Text)  # URL where lead was found
-    contact_page_url: Mapped[Optional[str]] = mapped_column(Text)
-    
-    # Organization Details
-    organization_name: Mapped[str] = mapped_column(String(255))
-    website: Mapped[str] = mapped_column(String(255))
-    
-    # Contact Information
-    contact_name: Mapped[Optional[str]] = mapped_column(String(255))
-    job_title: Mapped[Optional[str]] = mapped_column(String(255))
-    department: Mapped[Optional[str]] = mapped_column(String(255))
-    email: Mapped[Optional[str]] = mapped_column(String(255))
-    phone: Mapped[Optional[str]] = mapped_column(String(255))
-    
-    # Location
-    country: Mapped[Optional[str]] = mapped_column(String(100))
-    city: Mapped[Optional[str]] = mapped_column(String(100))
-    
-    # AI Qualification
-    lead_score: Mapped[int] = mapped_column(default=0)  # 0-100
-    ai_reasoning: Mapped[Optional[str]] = mapped_column(Text)
-    
-    # Status
-    status: Mapped[str] = mapped_column(LEAD_STATUS, default='new')
-    
-    # Email Campaign
-    generated_email: Mapped[Optional[str]] = mapped_column(Text)
-    email_template_id: Mapped[Optional[int]] = mapped_column(Integer)
-    
-    # Tracking
-    emails_sent: Mapped[int] = mapped_column(default=0)
-    last_emailed_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
-    
-    # Opt-out
-    do_not_contact: Mapped[bool] = mapped_column(default=False)
-    unsubscribed_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
-    
-    # Timestamps
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
-    
-    # Relationships
-    campaign: Mapped["Campaign"] = relationship(back_populates="leads")
-```
+### How It Works
 
-### Lead Status Enum
-```python
-LEAD_STATUS = ENUM(
-    'new',           # Just discovered
-    'researching',   # Being processed
-    'qualified',     # AI qualified
-    'review',        # Ready for human review
-    'approved',      # Approved for outreach
-    'rejected',      # Rejected by user
-    'scheduled',     # Email scheduled
-    'sent',          # Email sent
-    'replied',       # Got a reply
-    'interested',    # Expressed interest
-    'not_interested',# Not interested
-    'unsubscribed',  # Unsubscribed
-    'bounced',       # Email bounced
-    'do_not_contact',# Blocked
-    name='lead_status'
-)
-```
+1. `POST /api/v1/campaigns/{id}/start` sets the campaign to `researching` and
+   dispatches the search task (Celery `search` queue in Docker; in-process
+   asyncio fallback when no Redis broker is available - laptop development).
+2. The SearchAgent runs one search-provider query per keyword, filters junk
+   (social networks, search engines, non-HTML documents) and dedupes domains.
+3. One `research_results` row is stored per unique domain per campaign;
+   cross-keyword duplicates and re-runs are skipped (idempotent).
+4. Live progress (current keyword, % complete, websites found) is written to
+   Redis and exposed via `GET /api/v1/campaigns/{id}/progress`; the endpoint
+   falls back to database-derived counts when Redis has no entry.
+5. On success the campaign moves to `ready`; on failure it is reset to `draft`
+   with the error surfaced in the UI so research can be retried.
 
-### Implementation Checklist
+### Search Providers
 
-| # | Task | File | Estimate |
-|---|------|------|----------|
-| 1.3.1 | Create Lead model | `backend/app/models/lead.py` | 30 min |
-| 1.3.2 | Create Lead schema | `backend/app/schemas/lead.py` | 30 min |
-| 1.3.3 | Create Lead service | `backend/app/services/lead_service.py` | 45 min |
-| 1.3.4 | Implement Leads API endpoints | `backend/app/api/v1/leads.py` | 60 min |
-| 1.3.5 | Add Campaign-Lead relationship | `backend/app/models/campaign.py` | 15 min |
-| 1.3.6 | Create database migration | `backend/alembic/versions/` | 15 min |
-| 1.3.7 | Frontend Lead types | `frontend/src/types/index.ts` | 15 min |
-| 1.3.8 | Frontend API functions | `frontend/src/lib/api.ts` | 30 min |
-| 1.3.9 | Leads list page | `frontend/src/app/leads/page.tsx` | 45 min |
-| 1.3.10 | Lead detail page | `frontend/src/app/leads/[id]/page.tsx` | 45 min |
+Hosted Bing Search v7 was retired by Microsoft in August 2025, so three
+interchangeable providers are implemented (`SEARCH_PROVIDER=auto` picks the
+first configured one, in this order):
 
-### API Endpoints to Implement
+| Provider | Env vars | Notes |
+|----------|----------|-------|
+| SerpAPI (recommended) | `SERPAPI_KEY` | Paid, reliable Google results |
+| Google Custom Search | `GOOGLE_SEARCH_API_KEY` + `GOOGLE_SEARCH_ENGINE_ID` | 100 free queries/day |
+| Bing v7-compatible | `BING_SEARCH_API_KEY` (+ optional `BING_SEARCH_ENDPOINT`) | For compatible endpoints only |
 
-```
-GET    /api/v1/leads                    List leads (filter, paginate)
-POST   /api/v1/leads                    Create lead (used by crawler)
-GET    /api/v1/leads/{id}               Get lead details
-PUT    /api/v1/leads/{id}               Update lead
-DELETE /api/v1/leads/{id}               Delete lead
-POST   /api/v1/leads/{id}/approve       Approve for outreach
-POST   /api/v1/leads/{id}/reject        Reject lead
-POST   /api/v1/leads/bulk-approve       Bulk approve
-POST   /api/v1/leads/bulk-reject        Bulk reject
-GET    /api/v1/leads/export             Export (CSV/Excel/JSON)
-POST   /api/v1/leads/{id}/regenerate    Regenerate AI email
-POST   /api/v1/leads/{id}/do-not-contact Add to suppression
-```
+### Verification Performed
+
+- Search agent unit checks (validation, dedup, provider parsing) - passed
+- Full orchestration E2E against local MariaDB with a mocked provider:
+  keyword search → filter → dedup → persistence → status transitions →
+  idempotent re-run → failure path reset to draft - all passed
+- Frontend `next build` (includes tsc) - passed
+- Celery task registration and API routes - verified
 
 ---
 
-## 🔥 PRIORITY - Iteration 1.4: Search & Discovery
+## Iteration 1.4: Search & Discovery - Technical Specification (Implemented)
 
 **Objective:** Implement web search integration to discover relevant websites based on keywords.
 
@@ -307,7 +241,58 @@ REDIS_URL=redis://redis:6379/0
 
 ---
 
-## 🔥 PRIORITY - Iteration 1.5: Crawling & Extraction
+## ✅ COMPLETED - Iteration 1.5: Crawling & Extraction
+
+**Objective:** Implement the web crawler to extract public business contact information and create leads.
+**Completed:** 2026-09-02
+**Status:** ✅ Fully implemented and verified end-to-end
+
+### Implementation Summary
+
+| # | Task | File | Status |
+|---|------|------|--------|
+| 1.5.1 | Crawler Agent | `backend/app/agents/crawler_agent.py` | ✅ Robots + rate limits + contact-page pipeline |
+| 1.5.2 | Robots.txt handler | `backend/app/crawlers/robots_txt.py` | ✅ RFC 9309-style, per-domain cache |
+| 1.5.3 | Contact page finder | `backend/app/crawlers/page_finder.py` | ✅ Link scoring (contact/team/impressum) |
+| 1.5.4 | Email extractor | `backend/app/crawlers/email_extractor.py` | ✅ mailto + text, junk filtering |
+| 1.5.5 | Phone extractor | `backend/app/crawlers/phone_extractor.py` | ✅ tel: + patterns, placeholder rejection |
+| 1.5.6 | Crawling task | `backend/app/tasks/crawl_tasks.py` | ✅ Chained after search + standalone task |
+| 1.5.7 | Data normalization | `backend/app/services/data_normalizer.py` | ✅ |
+| 1.5.8 | Duplicate detection | `backend/app/services/duplicate_detector.py` | ✅ Per-campaign domain/email index |
+| 1.5.9 | Lead creation | `backend/app/services/lead_creator.py` | ✅ |
+
+### How It Works
+
+Research (`Start Research`) now runs both phases in one go:
+
+1. **Search phase** (Iteration 1.4): one search-provider query per keyword; discovered
+   websites stored as `research_results` (status `discovered`).
+2. **Crawl phase** (Iteration 1.5): each discovered website is visited politely -
+   robots.txt checked first (RFC 9309-style handling), a shared rate limiter keeps
+   `crawler_request_delay` between all requests, up to 4 contact-page candidates are
+   examined per site (`crawler_max_workers` crawl concurrently).
+3. Emails (mailto first), phones (tel: first) and the organization name
+   (og:site_name / title) are extracted, normalized and de-duplicated.
+4. Duplicate check: a per-campaign index of existing lead domains/emails skips
+   organizations that already have a lead; new organizations become **leads**
+   (status `new`, first email/phone stored).
+5. Per-site outcomes are recorded on the research result (`crawled`, `skipped`
+   robots/duplicate, `failed` + reason); progress tracking reports the crawl
+   (90-100% range); the campaign ends `ready`.
+6. Long runs are protected: Celery task time limits raised to 2h for both phases.
+
+### Verification Performed
+
+- Unit checks: email/phone extraction, junk + placeholder filtering, contact-page
+  scoring, normalization, duplicate detection - passed
+- Full E2E against a local test web server + real MariaDB: robots-blocked site
+  skipped, lead created with correct org/email/phone/contact URL, in-run and
+  cross-run duplicates skipped, campaign finalized `ready`, cleanup verified - passed
+- Celery registration (search + crawl tasks), API imports, `next build` - passed
+
+---
+
+## Iteration 1.5: Crawling & Extraction - Technical Specification (Implemented)
 
 **Objective:** Implement web crawler to extract public business contact information.
 
@@ -373,7 +358,55 @@ class ContactInfo(BaseModel):
 
 ---
 
-## 🔥 PRIORITY - Iteration 1.6: Export & Phase 1 Complete
+## ✅ COMPLETED - Iteration 1.6: Export & Phase 1 Complete
+
+**Objective:** Implement export functionality and complete the Phase 1 MVP.
+**Completed:** 2026-09-03
+**Status:** ✅ Fully implemented and verified end-to-end - **PHASE 1 COMPLETE**
+
+### Implementation Summary
+
+| # | Task | File | Status |
+|---|------|------|--------|
+| 1.6.1 | CSV export | `backend/app/services/export_service.py` | ✅ UTF-8 BOM, plan-spec columns |
+| 1.6.2 | Excel export | `backend/app/services/export_service.py` | ✅ openpyxl xlsx |
+| 1.6.3 | JSON export | `backend/app/services/export_service.py` | ✅ |
+| 1.6.4 | Export API endpoint | `backend/app/api/v1/leads.py` | ✅ `GET /leads/export` w/ filters + ownership |
+| 1.6.5 | Frontend export UI | `frontend/src/components/ExportButton.tsx` | ✅ Format picker + blob download |
+| 1.6.6 | Campaign statistics | `backend/app/services/analytics_service.py` | ✅ Real DB aggregates |
+| 1.6.7 | Stats API endpoints | `backend/app/api/v1/analytics.py` | ✅ dashboard + campaigns + campaign stats |
+| 1.6.8 | Dashboard stats UI | `frontend/src/components/StatsCards.tsx` | ✅ Dashboard + campaign detail pages |
+| 1.6.9 | End-to-end testing | throwaway E2E suite | ✅ All passed |
+| 1.6.10 | Phase 1 documentation | `PHASE1_COMPLETE.md` | ✅ |
+
+### How It Works
+
+- **Export**: `GET /api/v1/leads/export?campaign_id=&format=csv|excel|json`
+  (optional status/score filters) returns a file download. Ownership is verified;
+  CSV uses UTF-8 with BOM (Excel-safe); rows capped by `max_export_size`.
+  The leads page gained a format picker + download button.
+- **Statistics**: `GET /api/v1/analytics/dashboard` aggregates a user's campaigns,
+  leads and research totals; `GET /api/v1/analytics/campaigns` returns one summary
+  row per campaign; `GET /api/v1/campaigns/{id}/stats` now returns real DB counts
+  (websites found/crawled, contacts, leads, emails sent, replies, bounces).
+  The campaigns page shows dashboard stat cards; the campaign detail page shows
+  per-campaign stat cards.
+- Open/click tracking counters stay zero until Phase 4 adds tracking.
+
+### Verification Performed
+
+- Export round-trips: CSV re-parsed (headers + rows), xlsx loaded via openpyxl,
+  JSON re-parsed; unsupported format rejected
+- Analytics counts verified against fixture data (campaign stats, dashboard
+  aggregates, per-campaign comparison)
+- Endpoint-level tests (TestClient + auth override): all 3 formats download with
+  Content-Disposition, 400 on bad format, 404 on unknown campaign, analytics
+  endpoints return correct aggregates
+- Frontend `next build` passed; DB left clean (no test fixtures)
+
+---
+
+## Iteration 1.6: Export & Phase 1 Complete - Technical Specification (Implemented)
 
 **Objective:** Implement export functionality and complete Phase 1 MVP.
 
@@ -656,8 +689,8 @@ smart-reach-ai/
 ├── backend/
 │   ├── app/
 │   │   ├── agents/              # AI Agents
-│   │   │   ├── search_agent.py
-│   │   │   ├── crawler_agent.py
+│   │   │   ├── search_agent.py ✅
+│   │   │   ├── crawler_agent.py ✅
 │   │   │   ├── qualification_agent.py
 │   │   │   ├── email_agent.py
 │   │   │   └── reply_agent.py
@@ -665,10 +698,10 @@ smart-reach-ai/
 │   │   │   └── v1/
 │   │   │       ├── auth.py ✅
 │   │   │       ├── campaigns.py ✅
-│   │   │       ├── leads.py ⏳
+│   │   │       ├── leads.py ✅
 │   │   │       ├── emails.py ⏳
 │   │   │       ├── suppression.py ⏳
-│   │   │       ├── analytics.py ⏳
+│   │   │       ├── analytics.py ✅
 │   │   │       ├── admin.py ✅
 │   │   │       └── webhooks.py ⏳
 │   │   ├── core/
@@ -677,9 +710,9 @@ smart-reach-ai/
 │   │   │   ├── ai_config.py ⏳
 │   │   │   └── rate_limits.py ⏳
 │   │   ├── crawlers/            # Web Crawlers
-│   │   │   ├── robots_txt.py ⏳
-│   │   │   ├── page_finder.py ⏳
-│   │   │   ├── email_extractor.py ⏳
+│   │   │   ├── robots_txt.py ✅
+│   │   │   ├── page_finder.py ✅
+│   │   │   ├── email_extractor.py ✅
 │   │   │   └── phone_extractor.py ⏳
 │   │   ├── db/
 │   │   │   ├── base.py ✅
@@ -687,7 +720,7 @@ smart-reach-ai/
 │   │   ├── integrations/       # External Services
 │   │   │   ├── openai_client.py ⏳
 │   │   │   ├── anthropic_client.py ⏳
-│   │   │   ├── bing_search.py ⏳
+│   │   │   ├── bing_search.py ✅
 │   │   │   ├── smtp_client.py ⏳
 │   │   │   ├── ses_client.py ⏳
 │   │   │   ├── gmail_client.py ⏳
@@ -695,28 +728,32 @@ smart-reach-ai/
 │   │   ├── models/
 │   │   │   ├── user.py ✅
 │   │   │   ├── campaign.py ✅
-│   │   │   ├── lead.py ⏳
+│   │   │   ├── lead.py ✅
+│   │   │   ├── research_result.py ✅
 │   │   │   ├── suppression.py ⏳
 │   │   │   └── reply.py ⏳
 │   │   ├── schemas/
 │   │   │   ├── user.py ✅
 │   │   │   ├── campaign.py ✅
-│   │   │   ├── lead.py ⏳
+│   │   │   ├── lead.py ✅
 │   │   │   └── email.py ⏳
 │   │   ├── services/
 │   │   │   ├── campaign_service.py ✅
-│   │   │   ├── lead_service.py ⏳
+│   │   │   ├── lead_service.py ✅
+│   │   │   ├── lead_creator.py ✅
+│   │   │   ├── data_normalizer.py ✅
+│   │   │   ├── duplicate_detector.py ✅
 │   │   │   ├── email_service.py ⏳
-│   │   │   ├── export_service.py ⏳
+│   │   │   ├── export_service.py ✅
 │   │   │   ├── suppression_service.py ⏳
 │   │   │   ├── personalization_service.py ⏳
 │   │   │   ├── template_service.py ⏳
-│   │   │   ├── data_normalizer.py ⏳
+│   │   │   ├── data_normalizer.py ✅
 │   │   │   └── duplicate_detector.py ⏳
 │   │   ├── tasks/
 │   │   │   ├── celery_app.py ⏳
-│   │   │   ├── search_tasks.py ⏳
-│   │   │   ├── crawl_tasks.py ⏳
+│   │   │   ├── search_tasks.py ✅
+│   │   │   ├── crawl_tasks.py ✅
 │   │   │   ├── qualification_tasks.py ⏳
 │   │   │   ├── email_tasks.py ⏳
 │   │   │   └── campaign_scheduler.py ⏳
@@ -735,15 +772,15 @@ smart-reach-ai/
 │   │   │   ├── login/ ✅
 │   │   │   ├── register/ ✅
 │   │   │   ├── campaigns/ ✅
-│   │   │   ├── leads/ ⏳
+│   │   │   ├── leads/ ✅
 │   │   │   ├── analytics/ ⏳
 │   │   │   └── replies/ ⏳
 │   │   ├── components/          # Reusable components
 │   │   │   ├── ui/ ✅ (shadcn)
 │   │   │   ├── CampaignCard.tsx ⏳
 │   │   │   ├── LeadCard.tsx ⏳
-│   │   │   ├── ResearchProgress.tsx ⏳
-│   │   │   ├── ExportButton.tsx ⏳
+│   │   │   ├── ResearchProgress.tsx ✅
+│   │   │   ├── ExportButton.tsx ✅
 │   │   │   └── StatsCards.tsx ⏳
 │   │   ├── hooks/
 │   │   │   └── useAuth.ts ✅
@@ -769,9 +806,12 @@ smart-reach-ai/
 
 ### Immediate (This Week)
 1. ✅ Create detailed development plan (YOU ARE HERE)
-2. ⏳ Iteration 1.3: Lead System implementation
-3. ⏳ Iteration 1.4: Search & Discovery
-4. ⏳ Iteration 1.5: Crawling & Extraction
+2. ✅ Iteration 1.3: Lead System implementation
+3. ✅ Iteration 1.4: Search & Discovery
+4. ✅ Iteration 1.5: Crawling & Extraction
+5. ✅ Iteration 1.6: Export & Phase 1 Complete
+
+**Phase 1 MVP complete.** Next: Phase 2 - AI Qualification & Email Generation.
 5. ⏳ Iteration 1.6: Export & Phase 1 Complete
 
 ### Short-term (Next 2-4 Weeks)
@@ -804,4 +844,4 @@ smart-reach-ai/
 
 **End of Development Plan**
 
-Next: Implement Iteration 1.3 - Lead System
+Next: Phase 2 - AI Qualification & Email Generation

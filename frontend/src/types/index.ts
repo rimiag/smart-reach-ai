@@ -62,6 +62,52 @@ export interface CampaignStats {
 }
 
 // -----------------------------------------------------------------------------
+// Research Progress Types
+// -----------------------------------------------------------------------------
+export type ResearchStatus = CampaignStatus | 'failed';
+
+export interface ResearchProgress {
+  campaign_id: number;
+  status: ResearchStatus;
+  current_step: string;
+  progress_percentage: number;
+  websites_found: number;
+  websites_crawled: number;
+  contacts_found: number;
+  leads_created: number;
+  keywords_total: number;
+  keywords_completed: number;
+  started_at?: string;
+  estimated_completion?: string;
+  error?: string | null;
+}
+
+// -----------------------------------------------------------------------------
+// Analytics Types
+// -----------------------------------------------------------------------------
+export interface DashboardStats {
+  campaigns_total: number;
+  campaigns_active: number;
+  leads_total: number;
+  leads_new: number;
+  leads_approved: number;
+  leads_rejected: number;
+  websites_discovered: number;
+  websites_crawled: number;
+}
+
+export interface CampaignComparison {
+  campaign_id: number;
+  campaign_name: string;
+  status: CampaignStatus;
+  leads_total: number;
+  leads_new: number;
+  leads_approved: number;
+  websites_discovered: number;
+  created_at: string;
+}
+
+// -----------------------------------------------------------------------------
 // Lead Types
 // -----------------------------------------------------------------------------
 export type LeadStatus = 'new' | 'researching' | 'qualified' | 'review' | 'approved' | 'rejected' | 'scheduled' | 'sent' | 'replied' | 'interested' | 'not_interested' | 'unsubscribed' | 'bounced' | 'do_not_contact';

@@ -85,7 +85,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    command: celery -A app.tasks.celery_app worker --loglevel=info --concurrency=2
+    command: celery -A app.tasks.celery_app worker --loglevel=info --concurrency=2 --queues=celery,search,crawl,ai,email
     env_file:
       - ./.staging.env
     environment:

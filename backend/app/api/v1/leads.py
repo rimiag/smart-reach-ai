@@ -6,9 +6,10 @@ Handles lead management, approval, rejection, and bulk operations.
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.db.base import get_db
 from app.dependencies import get_current_user
 from app.models.lead import Lead
@@ -23,6 +24,8 @@ from app.schemas.lead import (
     LeadUpdate,
 )
 from app.schemas.user import UserResponse
+from app.services.campaign_service import campaign_service
+from app.services.export_service import export_service
 from app.services.lead_service import lead_service
 
 router = APIRouter()
@@ -101,6 +104,62 @@ async def create_lead(
     new_lead = await lead_service.create_lead(db, current_user.id, lead_data)
 
     return LeadResponse.model_validate(new_lead)
+
+
+@router.get("/export")
+async def export_leads(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[UserResponse, Depends(get_current_user)],
+    campaign_id: int = Query(..., description="Campaign ID"),
+    format: str = Query("csv", description="Export format: csv, excel or json"),
+    lead_status: str = Query(None, alias="status", description="Filter by lead status"),
+    min_score: int = Query(None, ge=0, le=100, description="Minimum lead score"),
+    max_score: int = Query(None, ge=0, le=100, description="Maximum lead score"),
+):
+    """
+    Export a campaign's leads as CSV, Excel or JSON.
+
+    Returns a file download (Content-Disposition attachment). Optional status
+    and score filters mirror the leads list endpoint.
+    """
+    campaign = await campaign_service.get_campaign(db, campaign_id)
+
+    if not campaign:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Campaign not found",
+        )
+
+    if campaign.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to export this campaign's leads",
+        )
+
+    leads, _total = await lead_service.get_campaign_leads(
+        db,
+        campaign_id=campaign_id,
+        user_id=current_user.id,
+        skip=0,
+        limit=settings.max_export_size,
+        status=lead_status,
+        min_score=min_score,
+        max_score=max_score,
+    )
+
+    try:
+        content, media_type, filename = export_service.export(leads, format)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/{lead_id}", response_model=LeadDetailResponse)
