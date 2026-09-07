@@ -19,6 +19,12 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+# NEXT_PUBLIC_* variables are inlined into the JS bundle at build time.
+# The CI workflow passes this as a build-arg (repo variable
+# NEXT_PUBLIC_API_URL, falling back to the staging VM IP).
+ARG NEXT_PUBLIC_API_URL=http://192.168.1.30:8000
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+
 # Build the application
 RUN npm run build
 
