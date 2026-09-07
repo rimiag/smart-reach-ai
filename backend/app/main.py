@@ -66,8 +66,9 @@ app = FastAPI(
     title=settings.app_name,
     description="AI-powered lead generation and outreach platform",
     version="0.1.0",
-    docs_url="/docs" if settings.environment == "development" else None,
-    redoc_url="/redoc" if settings.environment == "development" else None,
+    # API docs on every non-production environment (staging included)
+    docs_url="/docs" if settings.environment != "production" else None,
+    redoc_url="/redoc" if settings.environment != "production" else None,
     lifespan=lifespan,
 )
 
@@ -144,7 +145,7 @@ async def root():
     return {
         "message": f"Welcome to {settings.app_name} API",
         "version": "0.1.0",
-        "docs": "/docs" if settings.environment == "development" else None,
+        "docs": "/docs" if settings.environment != "production" else None,
     }
 
 
