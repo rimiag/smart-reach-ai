@@ -12,7 +12,12 @@ echo "=========================================="
 # Display environment info
 echo "Environment: ${ENVIRONMENT:-development}"
 
-# Wait for database to be ready and check/create tables in one go
+# Wait for database to be ready and check/create tables in one go.
+# Services that don't need the database (e.g. flower) may run without
+# DATABASE_URL - skip the check instead of exiting.
+if [ -z "${DATABASE_URL:-}" ]; then
+  echo "DATABASE_URL not set - skipping database check for this service."
+else
 echo "Waiting for database and ensuring tables exist..."
 python -c "
 import time
@@ -61,6 +66,7 @@ except Exception as e:
     traceback.print_exc()
     sys.exit(1)
 "
+fi
 
 echo "=========================================="
 echo "Starting Service"
