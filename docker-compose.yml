@@ -33,7 +33,9 @@ x-backend-env: &backend-env
   LOG_FORMAT: json
   API_URL: ${API_URL:-http://localhost:8000}
   FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
-  CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+  # Staging VM origin must always be allowed, even if .staging.env wasn't
+  # sourced when the stack was brought up.
+  CORS_ORIGINS: ${CORS_ORIGINS:-http://192.168.1.30:3000,http://localhost:3000}
 
 services:
   frontend:
