@@ -1,183 +1,218 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { api } from '@/lib/api';
-import type { Campaign, DashboardStats } from '@/types';
+import type { Campaign, CampaignComparison, DashboardStats } from '@/types';
 import Link from 'next/link';
 import AppShell from '@/components/AppShell';
-import Header from '@/components/Header';
 import StatsCards from '@/components/StatsCards';
+import StatusBadge from '@/components/StatusBadge';
+import Skeleton from '@/components/Skeleton';
+import EmptyState from '@/components/EmptyState';
 
 export default function CampaignsPage() {
   const { isAuthenticated } = useAuth();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [comparison, setComparison] = useState<CampaignComparison[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
-  useEffect(() => {
+  const fetchAll = useCallback(async () => {
     if (!isAuthenticated) return;
+    try {
+      const response = await api.getCampaigns();
+      setCampaigns(response.data.items || []);
+      setError('');
 
-    const fetchCampaigns = async () => {
       try {
-        const response = await api.getCampaigns();
-        setCampaigns(response.data.items || []);
-
-        // Dashboard statistics (non-fatal if unavailable)
-        try {
-          const statsResponse = await api.getDashboardStats();
-          setStats(statsResponse.data as DashboardStats);
-        } catch {
-          // stats are additive - never block the campaign list on them
-        }
-      } catch (err: unknown) {
-        const axiosError = err as { response?: { data?: { error?: { message?: string } } } };
-        const message = axiosError.response?.data?.error?.message || 'Failed to load campaigns';
-        setError(message);
-      } finally {
-        setIsLoading(false);
+        const [statsRes, comparisonRes] = await Promise.all([
+          api.getDashboardStats(),
+          api.getCampaignAnalytics(),
+        ]);
+        setStats(statsRes.data as DashboardStats);
+        setComparison(comparisonRes.data as CampaignComparison[]);
+      } catch {
+        // stats are additive - never block the campaign list on them
       }
-    };
-
-    fetchCampaigns();
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: { error?: { message?: string } } } };
+      setError(axiosError.response?.data?.error?.message || 'Failed to load campaigns');
+    } finally {
+      setIsLoading(false);
+    }
   }, [isAuthenticated]);
+
+  useEffect(() => {
+    fetchAll();
+  }, [fetchAll]);
+
+  const statsFor = (campaignId: number): CampaignComparison | undefined =>
+    comparison.find((row) => row.campaign_id === campaignId);
 
   if (!isAuthenticated) {
     return (
-      <main className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center">
-        <div className="text-gray-600 dark:text-gray-300">
-          Please <Link href="/login" className="text-blue-600 hover:text-blue-700 font-medium">sign in</Link> to view campaigns
-        </div>
-      </main>
+      <AppShell title="Campaigns">
+        <EmptyState
+          title="Sign in required"
+          message="Sign in to manage your lead generation campaigns."
+          action={
+            <Link
+              href="/login"
+              className="inline-block bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-md text-sm font-medium"
+            >
+              Sign in
+            </Link>
+          }
+        />
+      </AppShell>
     );
   }
 
   return (
-    <AppShell>
-      <Header
-        title="Campaigns"
-        description="Manage your lead generation campaigns"
-        action={
-          <Link
-            href="/campaigns/new"
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-md transition-colors"
-          >
-            New Campaign
-          </Link>
-        }
-      />
-      <div className="container mx-auto px-4 py-8">
+    <AppShell
+      title="Campaigns"
+      description="Create campaigns, run AI research and manage outreach"
+      action={
+        <Link
+          href="/campaigns/new"
+          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+        >
+          + New Campaign
+        </Link>
+      }
+    >
+      {error && (
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 px-4 py-3 rounded-md mb-6">
+          {error}
+        </div>
+      )}
 
-        {error && (
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 px-4 py-3 rounded-md mb-6">
-            {error}
-          </div>
-        )}
+      {/* Key stats */}
+      {stats && !isLoading && (
+        <div className="mb-8">
+          <StatsCards
+            stats={[
+              { label: 'Campaigns', value: stats.campaigns_total },
+              { label: 'Active Now', value: stats.campaigns_active },
+              { label: 'Total Leads', value: stats.leads_total },
+              { label: 'New Leads', value: stats.leads_new },
+              { label: 'Approved', value: stats.leads_approved },
+              { label: 'Websites Found', value: stats.websites_discovered },
+              { label: 'Websites Crawled', value: stats.websites_crawled },
+            ]}
+          />
+        </div>
+      )}
 
-        {stats && !isLoading && (
-          <div className="mb-8">
-            <StatsCards
-              stats={[
-                { label: 'Campaigns', value: stats.campaigns_total },
-                { label: 'Active Now', value: stats.campaigns_active },
-                { label: 'Total Leads', value: stats.leads_total },
-                { label: 'New Leads', value: stats.leads_new },
-                { label: 'Approved', value: stats.leads_approved },
-                { label: 'Websites Found', value: stats.websites_discovered },
-                { label: 'Websites Crawled', value: stats.websites_crawled },
-              ]}
-            />
-          </div>
-        )}
-
-        {isLoading ? (
-          <div className="text-center py-12">
-            <div className="text-gray-600 dark:text-gray-400">Loading campaigns...</div>
-          </div>
-        ) : campaigns.length === 0 ? (
-          <div className="text-center py-12">
-            <div className="text-gray-500 dark:text-gray-400 mb-4">
-              No campaigns yet
-            </div>
+      {isLoading ? (
+        <Skeleton rows={4} />
+      ) : campaigns.length === 0 ? (
+        <EmptyState
+          icon={
+            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+              />
+            </svg>
+          }
+          title="No campaigns yet"
+          message="Create your first campaign to start discovering leads."
+          action={
             <Link
               href="/campaigns/new"
-              className="text-blue-600 hover:text-blue-700 font-medium"
+              className="inline-block bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-md text-sm font-medium"
             >
-              Create your first campaign →
+              Create your first campaign
             </Link>
-          </div>
-        ) : (
-          <div className="grid gap-6">
-            {campaigns.map((campaign) => (
+          }
+        />
+      ) : (
+        <div className="grid gap-5 lg:grid-cols-2">
+          {campaigns.map((campaign) => {
+            const row = statsFor(campaign.id);
+            const locations = Array.isArray(
+              (campaign.settings || {}).locations
+            )
+              ? ((campaign.settings || {}).locations as string[])
+              : [];
+            return (
               <div
                 key={campaign.id}
-                className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow"
+                className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow flex flex-col"
               >
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                      {campaign.name}
-                    </h3>
-                    <p className="text-gray-600 dark:text-gray-400 mb-4">
-                      {campaign.description || 'No description'}
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {campaign.keywords.slice(0, 3).map((keyword, idx) => (
-                        <span
-                          key={idx}
-                          className="bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 px-2 py-1 rounded text-sm"
-                        >
-                          {keyword}
-                        </span>
-                      ))}
-                      {campaign.keywords.length > 3 && (
-                        <span className="text-gray-500 dark:text-gray-400 text-sm">
-                          +{campaign.keywords.length - 3} more
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${
-                      campaign.status === 'draft' ? 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300' :
-                      campaign.status === 'researching' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300' :
-                      campaign.status === 'ready' ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300' :
-                      campaign.status === 'active' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300' :
-                      campaign.status === 'paused' ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300' :
-                      'bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300'
-                    }`}>
-                      {campaign.status.charAt(0).toUpperCase() + campaign.status.slice(1)}
+                <div className="flex justify-between items-start mb-3">
+                  <Link
+                    href={`/campaigns/${campaign.id}`}
+                    className="text-lg font-semibold text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400"
+                  >
+                    {campaign.name}
+                  </Link>
+                  <StatusBadge status={campaign.status} size="md" />
+                </div>
+
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-3 line-clamp-2">
+                  {campaign.description || 'No description'}
+                </p>
+
+                <div className="flex flex-wrap gap-1.5 mb-4">
+                  {campaign.keywords.slice(0, 4).map((keyword, idx) => (
+                    <span
+                      key={idx}
+                      className="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded text-xs"
+                    >
+                      {keyword}
                     </span>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-                      Created {new Date(campaign.created_at).toLocaleDateString()}
-                    </p>
+                  ))}
+                  {campaign.keywords.length > 4 && (
+                    <span className="text-gray-500 dark:text-gray-400 text-xs">
+                      +{campaign.keywords.length - 4} more
+                    </span>
+                  )}
+                </div>
+
+                {/* Per-campaign metrics from the comparison data */}
+                <div className="grid grid-cols-3 gap-2 text-center mb-4">
+                  <div className="bg-gray-50 dark:bg-gray-900/50 rounded-md py-2">
+                    <div className="text-lg font-semibold text-gray-900 dark:text-white">
+                      {row?.leads_total ?? 0}
+                    </div>
+                    <div className="text-[11px] text-gray-500 dark:text-gray-400">Leads</div>
+                  </div>
+                  <div className="bg-gray-50 dark:bg-gray-900/50 rounded-md py-2">
+                    <div className="text-lg font-semibold text-gray-900 dark:text-white">
+                      {row?.leads_new ?? 0}
+                    </div>
+                    <div className="text-[11px] text-gray-500 dark:text-gray-400">New</div>
+                  </div>
+                  <div className="bg-gray-50 dark:bg-gray-900/50 rounded-md py-2">
+                    <div className="text-lg font-semibold text-gray-900 dark:text-white">
+                      {row?.websites_discovered ?? 0}
+                    </div>
+                    <div className="text-[11px] text-gray-500 dark:text-gray-400">Sites</div>
                   </div>
                 </div>
-                <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center">
-                  <div className="flex gap-4">
-                    <Link
-                      href={`/campaigns/${campaign.id}`}
-                      className="text-blue-600 hover:text-blue-700 font-medium text-sm"
-                    >
-                      View Details →
-                    </Link>
-                    <Link
-                      href={`/leads?campaign_id=${campaign.id}`}
-                      className="text-green-600 hover:text-green-700 font-medium text-sm flex items-center gap-1"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                      </svg>
-                      Leads →
-                    </Link>
-                  </div>
+
+                <div className="mt-auto pt-3 border-t border-gray-100 dark:border-gray-700 flex justify-between items-center">
+                  <span className="text-xs text-gray-400 dark:text-gray-500">
+                    Created {new Date(campaign.created_at).toLocaleDateString()}
+                  </span>
+                  <Link
+                    href={`/campaigns/${campaign.id}`}
+                    className="text-sm font-medium text-blue-600 hover:text-blue-700"
+                  >
+                    Open →
+                  </Link>
                 </div>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </AppShell>
   );
 }

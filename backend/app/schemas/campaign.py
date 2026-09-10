@@ -5,7 +5,7 @@ Pydantic models for campaign-related requests and responses.
 """
 
 from datetime import datetime
-from typing import Literal, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -44,6 +44,14 @@ class CampaignCreate(CampaignBase):
         if len(keywords) < 5 or len(keywords) > 10:
             raise ValueError("Must have between 5 and 10 keywords")
         return keywords
+
+
+class StartResearchRequest(BaseModel):
+    """Optional geo-targeting when starting research."""
+
+    locations: Optional[List[str]] = Field(
+        default=None, description="Locations to geo-target searches (e.g. ['United States'])"
+    )
 
 
 class CampaignUpdate(BaseModel):

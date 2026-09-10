@@ -133,13 +133,20 @@ class SearchAgent:
     def __init__(self, provider: Optional[SearchProvider] = None) -> None:
         self.provider = provider or get_search_provider()
 
-    async def search(self, keyword: str, limit: Optional[int] = None) -> List[SearchResult]:
+    async def search(
+        self,
+        keyword: str,
+        limit: Optional[int] = None,
+        location: Optional[str] = None,
+    ) -> List[SearchResult]:
         """
         Search for websites relevant to the keyword.
 
         Args:
             keyword: The search term.
             limit: Maximum results; defaults to settings.search_results_per_keyword.
+            location: Optional free-text location (e.g. "United States") - passed
+                to the provider to geo-target results where supported.
 
         Returns:
             Validated search results, deduplicated by domain, ordered by position.
@@ -149,7 +156,7 @@ class SearchAgent:
         """
         limit = limit or settings.search_results_per_keyword
 
-        raw_results = await self.provider.search(keyword, limit)
+        raw_results = await self.provider.search(keyword, limit, location=location)
         logger.info(
             "Keyword %r: %d raw results from %s",
             keyword,

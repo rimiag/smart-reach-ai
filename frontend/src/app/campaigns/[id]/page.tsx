@@ -19,6 +19,8 @@ export default function CampaignDetailPage() {
   const [researchActive, setResearchActive] = useState(false);
   const [isStartingResearch, setIsStartingResearch] = useState(false);
   const [aiMessage, setAiMessage] = useState('');
+  const [showLocationModal, setShowLocationModal] = useState(false);
+  const [locationsInput, setLocationsInput] = useState('');
 
   const stageIndex =
     {
@@ -71,15 +73,35 @@ export default function CampaignDetailPage() {
     }
   }, [params.id, fetchCampaign, fetchLeadsCount]);
 
-  const handleStartResearch = async () => {
+  const handleStartResearch = () => {
+    if (!campaign) return;
+    // Prefill with any locations saved on the campaign
+    const saved = ((campaign.settings || {}) as Record<string, unknown>).locations;
+    setLocationsInput(Array.isArray(saved) ? saved.join(', ') : '');
+    setError('');
+    setShowLocationModal(true);
+  };
+
+  const handleConfirmStartResearch = async () => {
     if (!campaign) return;
 
+    const locations = locationsInput
+      .split(',')
+      .map((loc) => loc.trim())
+      .filter(Boolean);
+
     setIsStartingResearch(true);
+    setError('');
     try {
-      await api.startResearch(campaign.id);
-      // Stay on this page and show live research progress.
+      await api.startResearch(campaign.id, locations.length ? { locations } : undefined);
+      setShowLocationModal(false);
       setCampaign({ ...campaign, status: 'researching', started_at: new Date().toISOString() });
       setResearchActive(true);
+      setAiMessage(
+        locations.length
+          ? `Research started - targeting: ${locations.join(', ')}`
+          : 'Research started'
+      );
     } catch (err: unknown) {
       const axiosError = err as { response?: { data?: { error?: { message?: string } } } };
       const message = axiosError.response?.data?.error?.message || 'Failed to start research';
@@ -385,6 +407,65 @@ export default function CampaignDetailPage() {
           </div>
         </div>
       </div>
-    </main>
+            {/* Location targeting modal */}
+        {showLocationModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="w-full max-w-md rounded-lg bg-white dark:bg-gray-800 shadow-xl p-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
+                Target locations
+              </h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                Where should we search for leads? Leave empty for worldwide results.
+              </p>
+              <input
+                value={locationsInput}
+                onChange={(e) => setLocationsInput(e.target.value)}
+                placeholder="e.g. United States, United Kingdom"
+                className="w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 mb-3 bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+              />
+              <div className="flex flex-wrap gap-2 mb-5">
+                {['United States', 'United Kingdom', 'Canada', 'Australia', 'Germany', 'India'].map(
+                  (loc) => (
+                    <button
+                      key={loc}
+                      onClick={() =>
+                        setLocationsInput((prev) =>
+                          prev
+                            .split(',')
+                            .map((l) => l.trim())
+                            .filter(Boolean)
+                            .includes(loc)
+                            ? prev
+                            : prev
+                              ? `${prev}, ${loc}`
+                              : loc
+                        )
+                      }
+                      className="px-3 py-1 rounded-full text-xs bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60"
+                    >
+                      + {loc}
+                    </button>
+                  )
+                )}
+              </div>
+              <div className="flex justify-end gap-3 mt-4">
+                <button
+                  onClick={() => setShowLocationModal(false)}
+                  className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmStartResearch}
+                  disabled={isStartingResearch}
+                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white px-5 py-2 rounded-md text-sm font-medium"
+                >
+                  {isStartingResearch ? 'Starting...' : 'Start Research'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+</main>
   );
 }

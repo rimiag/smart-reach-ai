@@ -18,6 +18,57 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+# Common country names -> ISO 3166-1 alpha-2 codes for provider geo params
+COUNTRY_CODES = {
+    "united states": "us",
+    "usa": "us",
+    "us": "us",
+    "united kingdom": "gb",
+    "uk": "gb",
+    "great britain": "gb",
+    "england": "gb",
+    "canada": "ca",
+    "australia": "au",
+    "germany": "de",
+    "united arab emirates": "ae",
+    "uae": "ae",
+    "dubai": "ae",
+    "india": "in",
+    "france": "fr",
+    "netherlands": "nl",
+    "ireland": "ie",
+    "spain": "es",
+    "italy": "it",
+    "singapore": "sg",
+    "new zealand": "nz",
+    "switzerland": "ch",
+    "sweden": "se",
+    "norway": "no",
+    "denmark": "dk",
+    "belgium": "be",
+    "austria": "at",
+    "israel": "il",
+    "japan": "jp",
+    "brazil": "br",
+    "mexico": "mx",
+    "south africa": "za",
+    "qatar": "qa",
+    "saudi arabia": "sa",
+}
+
+
+def country_code(location: Optional[str]) -> Optional[str]:
+    """Resolve a free-text location to an ISO-2 country code, if recognized."""
+    if not location:
+        return None
+    normalized = location.strip().lower()
+    if normalized in COUNTRY_CODES:
+        return COUNTRY_CODES[normalized]
+    for name, code in COUNTRY_CODES.items():
+        if name in normalized:
+            return code
+    return None
+
 
 def extract_domain(url: str) -> str:
     """
@@ -80,7 +131,9 @@ class SearchProvider(ABC):
         return True
 
     @abstractmethod
-    async def search(self, keyword: str, limit: int) -> List[SearchResult]:
+    async def search(
+        self, keyword: str, limit: int, location: Optional[str] = None
+    ) -> List[SearchResult]:
         """
         Search the web for ``keyword`` and return up to ``limit`` results.
 

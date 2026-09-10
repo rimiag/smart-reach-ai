@@ -111,7 +111,8 @@ export const api = {
   updateCampaign: (id: number, data: Partial<{ name: string; description: string; keywords: string[] }>) =>
     apiClient.put(`/campaigns/${id}`, data),
   deleteCampaign: (id: number) => apiClient.delete(`/campaigns/${id}`),
-  startResearch: (id: number) => apiClient.post(`/campaigns/${id}/start`),
+  startResearch: (id: number, data?: { locations?: string[] }) =>
+    apiClient.post(`/campaigns/${id}/start`, data || {}),
   getResearchProgress: (id: number) => apiClient.get(`/campaigns/${id}/progress`),
   getCampaignStats: (id: number) => apiClient.get(`/campaigns/${id}/stats`),
   qualifyCampaign: (id: number) => apiClient.post(`/campaigns/${id}/qualify`),

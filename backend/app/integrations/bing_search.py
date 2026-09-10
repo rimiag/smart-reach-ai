@@ -12,10 +12,15 @@ or self-hosted equivalents). Configure ``BING_SEARCH_API_KEY`` and, if needed,
 """
 
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from app.core.config import settings
-from app.integrations.search_base import SearchProvider, SearchProviderError, SearchResult
+from app.integrations.search_base import (
+    SearchProvider,
+    SearchProviderError,
+    SearchResult,
+    country_code,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +38,9 @@ class BingSearchProvider(SearchProvider):
     def is_configured(self) -> bool:
         return bool(self.api_key)
 
-    async def search(self, keyword: str, limit: int) -> List[SearchResult]:
+    async def search(
+        self, keyword: str, limit: int, location: Optional[str] = None
+    ) -> List[SearchResult]:
         """
         Search Bing for ``keyword``.
 
@@ -52,6 +59,11 @@ class BingSearchProvider(SearchProvider):
             "textFormat": "Raw",
             "safeSearch": "Off",
         }
+        # Location targeting: Bing uses a two-part market code (e.g. en-US)
+        code = country_code(location) if location else None
+        if code:
+            params["cc"] = code.upper()
+            params["setLang"] = code if len(code) == 2 else "en"
         headers = {"Ocp-Apim-Subscription-Key": self.api_key}
 
         data = await self._request_json("GET", self.endpoint, params=params, headers=headers)

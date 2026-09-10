@@ -11,10 +11,15 @@ requested limit is reached.
 
 import asyncio
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from app.core.config import settings
-from app.integrations.search_base import SearchProvider, SearchProviderError, SearchResult
+from app.integrations.search_base import (
+    SearchProvider,
+    SearchProviderError,
+    SearchResult,
+    country_code,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +43,9 @@ class GoogleSearchProvider(SearchProvider):
     def is_configured(self) -> bool:
         return bool(self.api_key and self.engine_id)
 
-    async def search(self, keyword: str, limit: int) -> List[SearchResult]:
+    async def search(
+        self, keyword: str, limit: int, location: Optional[str] = None
+    ) -> List[SearchResult]:
         """
         Search Google for ``keyword``, paginating 10 results at a time.
         """
@@ -58,6 +65,11 @@ class GoogleSearchProvider(SearchProvider):
                 "num": min(self.MAX_PER_REQUEST, limit - len(results)),
                 "start": start,
             }
+            # Location targeting: gl biases the country, cr restricts to it
+            code = country_code(location) if location else None
+            if code:
+                params["gl"] = code
+                params["cr"] = f"country{code.upper()}"
 
             data = await self._request_json("GET", self.ENDPOINT, params=params)
             items = data.get("items") or []

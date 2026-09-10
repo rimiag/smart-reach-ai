@@ -21,7 +21,7 @@ Pipeline per campaign:
 
 import asyncio
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -43,10 +43,18 @@ logger = logging.getLogger(__name__)
 # -----------------------------------------------------------------------------
 # Core orchestration (async)
 # -----------------------------------------------------------------------------
-async def run_campaign_search_async(campaign_id: int) -> Dict[str, Any]:
+async def run_campaign_search_async(
+    campaign_id: int, locations: Optional[List[str]] = None
+) -> Dict[str, Any]:
     """
-    Run the research phases for a campaign: search every keyword, then crawl
-    the discovered websites (contact extraction + lead creation).
+    Run the research phases for a campaign: search every keyword (optionally
+    geo-targeted per location), then crawl the discovered websites (contact
+    extraction + lead creation).
+
+    Args:
+        campaign_id: Campaign to research.
+        locations: Optional free-text locations (e.g. ["United States"]) to
+            geo-target the searches; None searches globally.
 
     Idempotent: re-runs skip domains already stored for the campaign.
 
@@ -57,7 +65,7 @@ async def run_campaign_search_async(campaign_id: int) -> Dict[str, Any]:
     """
     async with AsyncSessionLocal() as db:
         try:
-            summary = await _run_search(db, campaign_id)
+            summary = await _run_search(db, campaign_id, locations)
         except Exception as exc:
             # Leave the system in a retryable state: report the failure and
             # put the campaign back to draft so the user can start again.
@@ -91,8 +99,10 @@ async def run_campaign_search_async(campaign_id: int) -> Dict[str, Any]:
     return summary
 
 
-async def _run_search(db: AsyncSession, campaign_id: int) -> Dict[str, Any]:
-    """Search every campaign keyword and save the results."""
+async def _run_search(
+    db: AsyncSession, campaign_id: int, locations: Optional[List[str]] = None
+) -> Dict[str, Any]:
+    """Search every campaign keyword (per location) and save the results."""
     result = await db.execute(select(Campaign).where(Campaign.id == campaign_id))
     campaign = result.scalar_one_or_none()
 
@@ -102,6 +112,9 @@ async def _run_search(db: AsyncSession, campaign_id: int) -> Dict[str, Any]:
     keywords: List[str] = list(campaign.keywords or [])
     if not keywords:
         raise ValueError(f"Campaign {campaign_id} has no keywords")
+
+    # Normalized location list; empty means global (no geo-targeting)
+    locations = [loc.strip() for loc in (locations or []) if loc and loc.strip()]
 
     # Raises SearchProviderError when nothing is configured - caught upstream.
     agent = SearchAgent()
@@ -128,15 +141,22 @@ async def _run_search(db: AsyncSession, campaign_id: int) -> Dict[str, Any]:
         "duplicates_skipped": 0,
     }
 
-    for idx, keyword in enumerate(keywords):
+    # Keyword x location matrix (one search per keyword per location)
+    search_targets: List[tuple] = [
+        (keyword, location) for keyword in keywords for location in (locations or [None])
+    ]
+    total_steps = len(search_targets)
+
+    for idx, (keyword, location) in enumerate(search_targets):
+        step_label = f"Searching: {keyword}" + (f" ({location})" if location else "")
         progress_tracker.set_step(
             campaign_id,
-            current_step=f"Searching: {keyword}",
-            progress_percentage=(idx / len(keywords)) * 100,
+            current_step=step_label,
+            progress_percentage=(idx / total_steps) * 100,
         )
 
         try:
-            results = await agent.search(keyword)
+            results = await agent.search(keyword, location=location or None)
         except SearchProviderError as exc:
             # One bad keyword must not sink the whole run.
             logger.error("Search failed for keyword %r: %s", keyword, exc)
@@ -144,7 +164,12 @@ async def _run_search(db: AsyncSession, campaign_id: int) -> Dict[str, Any]:
             continue
 
         saved, skipped = await _save_research_results(
-            db, campaign, keyword, results, provider_name=agent.provider.name
+            db,
+            campaign,
+            keyword,
+            results,
+            provider_name=agent.provider.name,
+            location=location,
         )
 
         summary["keywords_succeeded"] += 1
@@ -158,14 +183,15 @@ async def _run_search(db: AsyncSession, campaign_id: int) -> Dict[str, Any]:
         )
 
         logger.info(
-            "Keyword %r: %d new websites saved, %d duplicates skipped",
+            "Keyword %r (location: %s): %d new websites saved, %d duplicates skipped",
             keyword,
+            location or "global",
             saved,
             skipped,
         )
 
         # Be polite to the search provider between keywords.
-        if idx < len(keywords) - 1:
+        if idx < total_steps - 1:
             await asyncio.sleep(settings.search_per_keyword_delay)
 
     if summary["keywords_succeeded"] == 0:
@@ -187,6 +213,7 @@ async def _save_research_results(
     keyword: str,
     results: List[SearchResult],
     provider_name: str,
+    location: Optional[str] = None,
 ) -> tuple[int, int]:
     """
     Persist search results as ResearchResult rows.
@@ -214,6 +241,9 @@ async def _save_research_results(
         if not search_result.domain or search_result.domain in existing_domains:
             continue
 
+        extra = search_result.to_dict()
+        if location:
+            extra["location"] = location
         db.add(
             ResearchResult(
                 campaign_id=campaign.id,
@@ -226,7 +256,7 @@ async def _save_research_results(
                 status="discovered",
                 provider=provider_name,
                 result_position=search_result.position or None,
-                extra_data=search_result.to_dict(),
+                extra_data=extra,
             )
         )
         existing_domains.add(search_result.domain)

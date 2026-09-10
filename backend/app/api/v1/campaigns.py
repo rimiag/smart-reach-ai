@@ -6,7 +6,7 @@ Handles campaign CRUD, research management, and statistics.
 
 import asyncio
 import logging
-from typing import Annotated
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
@@ -29,6 +29,7 @@ from app.schemas.campaign import (
     ResearchProgress,
 )
 from app.schemas.common import MessageResponse, PaginatedResponse
+from app.schemas.campaign import StartResearchRequest
 from app.schemas.email import SendRequest
 from app.schemas.user import UserResponse
 from app.services.analytics_service import analytics_service
@@ -219,9 +220,13 @@ async def start_research(
     campaign_id: int,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[UserResponse, Depends(get_current_user)],
+    payload: Optional[StartResearchRequest] = None,
 ):
     """
-    Start the research phase for a campaign.
+    Start the research phase for a campaign, optionally geo-targeted.
+
+    Body (optional JSON): {"locations": ["United States", ...]} - when set,
+    searches are geo-targeted to those locations per keyword.
 
     Dispatches the search phase (one search-provider query per campaign
     keyword) to the Celery worker. When no message broker is available
@@ -229,6 +234,8 @@ async def start_research(
 
     Poll ``GET /campaigns/{id}/progress`` for live status.
     """
+    locations = [loc.strip() for loc in (payload.locations or []) if loc.strip()] if payload else []
+
     campaign = await campaign_service.get_campaign(db, campaign_id)
 
     if not campaign:
@@ -261,6 +268,12 @@ async def start_research(
             detail=str(exc),
         )
 
+    # Persist geo-targeting so it's visible/reusable (campaign.settings JSON)
+    if locations:
+        settings_map = dict(campaign.settings or {})
+        settings_map["locations"] = locations
+        campaign.settings = settings_map
+
     updated_campaign = await campaign_service.update_status(db, campaign, "researching")
 
     # Preferred path: Celery worker on the "search" queue. Fallback: run the
@@ -269,7 +282,9 @@ async def start_research(
     try:
         # retry=False: fail fast without a broker (local dev) so the
         # in-process fallback starts immediately.
-        run_campaign_search.apply_async(args=[updated_campaign.id], retry=False)
+        run_campaign_search.apply_async(
+            args=[updated_campaign.id, locations], retry=False
+        )
         dispatched_via_celery = True
     except Exception as exc:
         logger.warning(
@@ -279,7 +294,9 @@ async def start_research(
         )
 
     if not dispatched_via_celery:
-        research_task = asyncio.create_task(run_campaign_search_async(updated_campaign.id))
+        research_task = asyncio.create_task(
+            run_campaign_search_async(updated_campaign.id, locations)
+        )
         _background_research_tasks.add(research_task)
         research_task.add_done_callback(_background_research_tasks.discard)
 

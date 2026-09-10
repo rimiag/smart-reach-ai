@@ -8,10 +8,15 @@ request; pagination is available via the ``start`` parameter if ever needed.
 """
 
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from app.core.config import settings
-from app.integrations.search_base import SearchProvider, SearchProviderError, SearchResult
+from app.integrations.search_base import (
+    SearchProvider,
+    SearchProviderError,
+    SearchResult,
+    country_code,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +35,9 @@ class SerpAPISearchProvider(SearchProvider):
     def is_configured(self) -> bool:
         return bool(self.api_key)
 
-    async def search(self, keyword: str, limit: int) -> List[SearchResult]:
+    async def search(
+        self, keyword: str, limit: int, location: Optional[str] = None
+    ) -> List[SearchResult]:
         """
         Search SerpAPI for ``keyword``.
         """
@@ -43,6 +50,12 @@ class SerpAPISearchProvider(SearchProvider):
             "api_key": self.api_key,
             "num": max(10, min(limit, 100)),
         }
+        # Location targeting: SerpAPI accepts a free-text location name
+        if location:
+            params["location"] = location
+            code = country_code(location)
+            if code:
+                params["gl"] = code
 
         data = await self._request_json("GET", self.ENDPOINT, params=params)
 
