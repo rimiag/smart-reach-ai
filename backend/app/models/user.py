@@ -26,7 +26,9 @@ class User(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
 
     # Authentication
-    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    # 191 chars: keeps the utf8mb4 unique index under MariaDB 10.1's
+    # 767-byte key limit (191*4 = 764 bytes).
+    email: Mapped[str] = mapped_column(String(191), unique=True, nullable=False, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
 
     # Profile

@@ -78,7 +78,9 @@ class ResearchResult(Base):
     )
 
     domain: Mapped[str] = mapped_column(
-        String(255),
+        # 191 chars: keeps the utf8mb4 index under MariaDB 10.1's 767-byte
+        # key limit (191*4 = 764 bytes).
+        String(191),
         nullable=False,
         index=True,
     )

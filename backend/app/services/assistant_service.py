@@ -11,7 +11,7 @@ from typing import Any, Dict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.integrations.ai_base import LLMClient, get_ai_client
+from app.integrations.ai_base import AIProviderError, LLMClient, get_ai_client
 from app.models.campaign import Campaign
 from app.models.email_log import EmailLog
 from app.models.lead import Lead
@@ -40,7 +40,17 @@ class AssistantService:
     """Answers natural-language questions grounded in user data."""
 
     def __init__(self, client: LLMClient = None) -> None:
-        self.client = client or get_ai_client()
+        # Tolerate a missing AI provider at construction: this singleton is
+        # built at module import time, and a raise here would crash-loop the
+        # whole API in environments without AI keys (e.g. staging). The
+        # per-request answer() raises AIProviderError instead.
+        try:
+            self.client = client or get_ai_client()
+            self.ai_available = True
+        except Exception as exc:
+            logger.warning("AI provider unavailable for assistant: %s", exc)
+            self.client = None
+            self.ai_available = False
 
     async def answer(self, db: AsyncSession, user_id: int, question: str) -> Dict[str, Any]:
         """
@@ -49,6 +59,11 @@ class AssistantService:
         Raises:
             AIProviderError: If no AI provider is configured.
         """
+        if not self.ai_available:
+            raise AIProviderError(
+                "No AI provider configured. Set ANTHROPIC_API_KEY, OPENAI_API_KEY, "
+                "or GEMINI_API_KEY (free: aistudio.google.com/apikey)."
+            )
         context = await self._build_context(db, user_id)
         response = await self.client.complete(
             system=SYSTEM_PROMPT,

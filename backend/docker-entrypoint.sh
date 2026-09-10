@@ -54,8 +54,15 @@ try:
     if missing_tables:
         print(f'Missing tables: {missing_tables}')
         print('Creating database tables...')
+        import asyncio
         import app.db.init_db
-        app.db.init_db.create_tables()
+        asyncio.run(app.db.init_db.create_tables())
+        # Verify the tables actually exist now - create_tables is async and a
+        # silent no-op would otherwise boot an API that 500s on every query.
+        still_missing = [t for t in required_tables if t not in inspect(engine).get_table_names()]
+        if still_missing:
+            print(f'ERROR: tables still missing after create_tables: {still_missing}')
+            sys.exit(1)
         print('Database tables created successfully!')
     else:
         print('All required tables exist.')
