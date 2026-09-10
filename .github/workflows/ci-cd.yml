@@ -133,6 +133,27 @@ jobs:
           docker compose -f docker-compose.yml pull
           docker compose -f docker-compose.yml up -d --remove-orphans
 
+      # The deploy fails inside `up -d` when the backend never passes its
+      # healthcheck - without this step the actual crash reason stays on the
+      # VM and every diagnosis needs a manual SSH session.
+      - name: Dump diagnostics on failure
+        if: failure()
+        run: |
+          export IMAGE_TAG=sha-${GITHUB_SHA::7}
+          echo "=== compose ps (all) ==="
+          docker compose -f docker-compose.yml ps -a || true
+          echo "=== backend logs (last 150 lines) ==="
+          docker logs --tail 150 smart-reach-ai-staging-backend-1 2>&1 || true
+          echo "=== backend health state ==="
+          docker inspect --format '{{json .State.Health}}' smart-reach-ai-staging-backend-1 2>/dev/null | head -c 3000 || true
+          echo ""
+          echo "=== db logs (last 40 lines) ==="
+          docker logs --tail 40 smart-reach-ai-staging-db-1 2>&1 || true
+          echo "=== VM resources ==="
+          free -h || true
+          df -h / || true
+          docker stats --no-stream || true
+
       - name: Wait for services to be healthy
         run: |
           check_url () {
