@@ -3,7 +3,7 @@
 **Project:** AI-Powered B2B Lead Generation & Outreach Platform
 **Version:** 0.1.0
 **Last Updated:** 2026-08-31
-**Status:** PHASE 1 COMPLETE - All iterations (1.0-1.6) done & verified
+**Status:** PHASE 5 COMPLETE (3 of 11 enhancements) - Follow-ups, AI Sales Assistant, Intent Detection
 
 ---
 
@@ -14,7 +14,10 @@ SmartReach AI is an intelligent B2B lead generation platform that discovers pote
 **Current Progress:**
 - ✅ Foundation (Authentication, Campaign CRUD, Frontend)
 - ✅ Phase 1 Core (100% complete)
-- ❌ Phases 2-5 (Not started)
+- ⏳ Phase 5 (3 of 11 enhancements delivered: follow-up sequences, AI sales assistant, intent detection)
+- ✅ Phase 4 (Reply Detection & Analytics) - Complete
+- ✅ Phase 2 (AI Qualification & Email Generation) - Complete
+- ✅ Phase 3 (Email Sending & Human Approval) - Complete
 
 **Architecture:**
 ```
@@ -36,10 +39,10 @@ Frontend (Next.js) → FastAPI Backend → MySQL Database
 | **Iteration 1.4** | Search & Discovery | ✅ Complete | 🔥 High |
 | **Iteration 1.5** | Crawling & Extraction | ✅ Complete | 🔥 High |
 | **Iteration 1.6** | Export & Phase 1 Complete | ✅ Complete | 🔥 High |
-| **Phase 2** | AI Qualification & Emails | ❌ Not Started | Medium |
-| **Phase 3** | Email Sending & Approval | ❌ Not Started | Medium |
-| **Phase 4** | Reply Detection & Analytics | ❌ Not Started | Low |
-| **Phase 5** | Future Enhancements | ❌ Not Started | Low |
+| **Phase 2** | AI Qualification & Emails | ✅ Complete | Medium |
+| **Phase 3** | Email Sending & Approval | ✅ Complete | Medium |
+| **Phase 4** | Reply Detection & Analytics | ✅ Complete | Low |
+| **Phase 5** | Future Enhancements | ✅ 3 Delivered | Low |
 
 ---
 
@@ -454,7 +457,63 @@ ABC Research,https://abc.edu,Dr. Smith,Research Director,Research IT,john@abc.ed
 
 ---
 
-## 📊 Phase 2: AI Qualification & Email Generation
+## ✅ COMPLETED - Phase 2: AI Qualification & Email Generation
+
+**Objective:** Add AI-powered lead scoring and personalized email generation.
+**Completed:** 2026-09-08
+**Status:** ✅ Fully implemented and verified - works with Anthropic or OpenAI
+
+### Implementation Summary
+
+| # | Task | File | Status |
+|---|------|------|--------|
+| 2.1 | AI provider selection | `backend/app/integrations/ai_base.py` + config | ✅ `ai_provider=auto` picks anthropic→openai |
+| 2.2 | OpenAI client | `backend/app/integrations/openai_client.py` | ✅ chat completions |
+| 2.3 | Anthropic client | `backend/app/integrations/anthropic_client.py` | ✅ messages API (SDK 1.x) |
+| 2.4 | Qualification Agent | `backend/app/agents/qualification_agent.py` | ✅ 0-100 score + reasoning + category |
+| 2.5 | Email Generation Agent | `backend/app/agents/email_agent.py` | ✅ subject + personalized body |
+| 2.6 | Template system | `backend/app/services/template_service.py` | ✅ 3 style variants, round-robin |
+| 2.7 | Personalization service | `backend/app/services/personalization_service.py` | ✅ verified-facts-only context |
+| 2.8 | Qualification task | `backend/app/tasks/qualify_tasks.py` | ✅ chained + celery "ai" queue |
+| 2.9 | Email generation task | `backend/app/tasks/email_tasks.py` | ✅ chained + celery task |
+| 2.10 | Lead review UI | `frontend/src/app/leads/review/page.tsx` | ✅ score-sorted decision queue |
+
+### How It Works
+
+- **Provider abstraction**: `LLMClient` interface with Anthropic + OpenAI
+  implementations; `ai_provider=auto` picks the first configured
+  (`ANTHROPIC_API_KEY` or `OPENAI_API_KEY`). Defaults: `claude-haiku-4-5` for
+  bulk qualification, `claude-sonnet-5` for email writing (configurable).
+- **Research pipeline is now**: search → crawl → **AI qualification** → finalize.
+  New leads are scored 0-100 with reasoning (`[category] reasoning` in
+  `ai_reasoning`) and move to `review`. Without a provider key the pipeline
+  skips qualification silently and leads stay `new`.
+- **Email drafts**: `generated_email` holds "Subject: ... \n\n body" for leads in
+  `review`/`approved`. Templates (professional/short_direct/value_first) rotate
+  per lead as structure hints; `{{SENDER_NAME}}`/`{{SENDER_COMPANY}}` remain as
+  placeholders for Phase 3. Nothing is ever sent automatically.
+- **Endpoints**: `POST /campaigns/{id}/qualify` + `/generate-emails` (queued),
+  `POST /leads/{id}/qualify` + `/regenerate` (synchronous, 502 on AI failure,
+  400 when no provider). Celery task registration is now explicit in
+  `celery_app.py` (fixes a latent worker registration gap).
+- **Frontend**: Review Queue page (score-sorted, approve/reject with email
+  preview), lead detail AI + draft cards with Qualify/Generate/Regenerate
+  buttons, campaign page action buttons.
+
+### Verification Performed
+
+- Unit checks: qualification/email response parsing (valid, malformed, score
+  clamping), template round-robin and `{{VAR|default}}` rendering - passed
+- Service E2E against real MariaDB with a fake AI client: new→review status
+  transitions with scores, idempotent re-runs, draft generation with
+  skip-existing and regenerate modes, placeholders preserved - passed
+- Endpoint tests (TestClient + auth override): 400 fail-fast without provider,
+  per-lead qualify and regenerate with fake provider - passed
+- Frontend `next build`; celery registration (5 app tasks) - passed
+
+---
+
+## Phase 2: AI Qualification & Email Generation - Technical Specification (Implemented)
 
 **Objective:** Add AI-powered lead scoring and personalized email generation.
 
@@ -519,7 +578,61 @@ Generate 5-10 template variations:
 
 ---
 
-## 📧 Phase 3: Email Sending & Human Approval
+## ✅ COMPLETED - Phase 3: Email Sending & Human Approval
+
+**Objective:** Integrate email providers and implement controlled sending with an approval workflow.
+**Completed:** 2026-09-09
+**Status:** ✅ Fully implemented and verified (SMTP provider; SES/Gmail/Graph deferred)
+
+### Implementation Summary
+
+| # | Task | File | Status |
+|---|------|------|--------|
+| 3.1 | Email provider config | `backend/app/core/config.py` (SMTP_* settings) | ✅ |
+| 3.2 | SMTP integration | `backend/app/integrations/smtp_client.py` | ✅ aiosmtplib + STARTTLS |
+| 3.3-3.5 | SES / Gmail API / Graph | deferred | ⏳ SMTP covers all providers via app passwords |
+| 3.6 | Email service | `backend/app/services/email_service.py` | ✅ Rendering, suppression, limits, audit log |
+| 3.7 | Sending limits | `backend/app/core/rate_limits.py` | ✅ Daily 50 / hourly 10 / cooldown 7d / pacing |
+| 3.8 | Send task | `backend/app/tasks/send_tasks.py` | ✅ Celery + in-process fallback |
+| 3.9 | Suppression model | `backend/app/models/suppression.py` | ✅ + `models/email_log.py` (send audit) |
+| 3.10 | Suppression service | in `email_service` + `/api/v1/suppression` CRUD | ✅ |
+| 3.11 | Approval + send API | `backend/app/api/v1/campaigns.py` | ✅ approve-all + send |
+| 3.12 | Approval UI | `frontend/src/app/campaigns/[id]/approve/page.tsx` | ✅ Review & Send page |
+
+### How It Works
+
+1. **Approve**: `POST /campaigns/{id}/approve-all` moves every reviewed lead with an
+   email draft to `approved`. Individual approvals also work per lead.
+2. **Review & Send** (`/campaigns/{id}/approve`): sender identity form (name,
+   company, from, reply-to - persisted in campaign settings), the send queue
+   sorted by lead score, an explicit confirmation checkbox, and live progress.
+3. **Send**: `POST /campaigns/{id}/send` validates SMTP config and the queue,
+   then dispatches the send task. Per lead: suppression check → per-lead
+   cooldown (7 days) → volume limits (50/day, 10/hour) → render final email
+   (sender placeholders filled, unsubscribe footer appended) → SMTP send →
+   `emails` audit row + lead status `sent`, `emails_sent++`.
+4. **Compliance**: every email carries a working one-click unsubscribe link
+   (`GET /api/v1/unsubscribe/{lead_id}/{token}` - no auth, token verified);
+   unsubscribes land in the suppression list and the lead is marked
+   `do_not_contact` + `unsubscribed`.
+5. **Polite stopping**: a run that hits a limit stops and can be resumed later
+   by clicking send again (sent leads are never re-sent).
+
+### Verification Performed
+
+- Unit: unsubscribe token determinism, final rendering (placeholder fill +
+  footer), limits wiring - passed
+- Service E2E with a fake SMTP transport against real MariaDB: sends with
+  substitution, suppression skip, cooldown skip, audit rows, lead status
+  transitions, non-approved leads untouched - passed
+- Endpoint tests (TestClient + auth override): 400 SMTP-unconfigured,
+  approve-all, send dispatch, send-log endpoint, unsubscribe valid/invalid
+  token - passed
+- Frontend `next build` + tsc - passed
+
+---
+
+## Phase 3: Email Sending & Human Approval - Technical Specification (Implemented)
 
 **Objective:** Integrate email providers and implement controlled sending with approval workflow.
 
@@ -579,7 +692,59 @@ class SendingLimits:
 
 ---
 
-## 📈 Phase 4: Reply Detection & Analytics
+## ✅ COMPLETED - Phase 4: Reply Detection & Analytics
+
+**Objective:** Monitor email replies and classify responses with AI; add analytics.
+**Completed:** 2026-09-10
+**Status:** ✅ Fully implemented and verified
+
+### Implementation Summary
+
+| # | Task | File | Status |
+|---|------|------|--------|
+| 4.1 | Webhook handler | `backend/app/api/v1/webhooks.py` | ✅ `POST /webhooks/reply` (+ optional secret) |
+| 4.2 | Reply model | `backend/app/models/reply.py` | ✅ + migration `004_replies.py` |
+| 4.3 | Reply monitoring service | `backend/app/services/reply_monitor.py` + `integrations/imap_client.py` | ✅ IMAP poll, thread/sender matching |
+| 4.4 | Reply classification agent | `backend/app/agents/reply_agent.py` | ✅ 9 categories + keyword fallback |
+| 4.5 | Analytics service | `backend/app/services/analytics_service.py` | ✅ + reply metrics |
+| 4.6 | Analytics API | `backend/app/api/v1/analytics.py` | ✅ `/analytics/replies` implemented |
+| 4.7 | Analytics UI | `frontend/src/app/analytics/page.tsx` | ✅ Metrics, comparison table, category bars |
+| 4.8 | Reply inbox UI | `frontend/src/app/replies/page.tsx` | ✅ Category filters, mark read, manual check |
+
+### How It Works
+
+1. **Detection**: replies are matched to outreach in two ways - In-Reply-To /
+   References Message-ID against the `emails` send log (precise), falling back to
+   sender-address matching (most recent lead wins). Duplicates are suppressed via
+   a unique thread reference.
+2. **Classification**: the reply agent classifies into 9 categories (interested,
+   not_interested, need_more_info, request_meeting, pricing_request,
+   out_of_office, unsubscribe, wrong_contact, other) with a one-line summary.
+   Keyword heuristics take over automatically when the AI provider is down.
+3. **Lead impact**: interested/meeting/pricing/info → `interested`;
+   not_interested → `not_interested`; unsubscribe → suppression list +
+   `do_not_contact` + `unsubscribed`; others → `replied`.
+4. **Polling**: Celery beat checks the mailbox every 15 minutes
+   (`reply_check_enabled`, `reply_check_interval_minutes`); manual trigger via
+   the Replies page ("Check mailbox now") or `GET /replies/check`.
+5. **Analytics**: `/analytics` page shows reply metrics (total, unread, last 7
+   days, reply rate) and a per-campaign comparison table; the site header now
+   links Campaigns / Replies / Analytics.
+
+### Verification Performed
+
+- Unit: classification parsing (valid/invalid category), keyword fallback
+  heuristics - passed
+- Service E2E with fake AI + real MariaDB: thread match, sender match,
+  duplicate skip, unknown-sender skip, lead status updates, unsubscribe ->
+  suppression - passed
+- Endpoint tests: replies list, check (IMAP-unconfigured skip), analytics
+  payload, webhook ingest - passed
+- Frontend tsc + `next build` - passed
+
+---
+
+## Phase 4: Reply Detection & Analytics - Technical Specification (Implemented)
 
 **Objective:** Monitor email replies and classify responses with AI.
 
@@ -625,7 +790,58 @@ REPLY_CATEGORIES = ENUM(
 
 ---
 
-## 🚀 Phase 5: Future Enhancements
+## ✅ COMPLETED - Phase 5: Future Enhancements (3 Delivered)
+
+**Objective:** Selected high-value enhancements from the Phase 5 menu.
+**Completed:** 2026-09-10
+**Status:** ✅ Follow-up sequences, AI sales assistant, lead intent detection
+
+### 1. Follow-up Sequences (High priority)
+
+- New: `follow_up_count` on leads (migration `005_follow_up_count.py`).
+- **Eligibility**: status `sent`, last email older than `follow_up_after_days`
+  (4), fewer than `follow_up_max_count` (2) follow-ups already drafted.
+- AI drafts a short, polite follow-up (dedicated prompt, never repeats the
+  first email) into `generated_email`, increments `follow_up_count`, and
+  returns the lead to `review` for human approval - sending stays manual.
+- Runs daily via Celery beat (`followup-sweep-daily`), on demand via
+  `POST /campaigns/{id}/generate-followups`, or in-process locally.
+- Config: `follow_up_enabled`, `follow_up_after_days`, `follow_up_max_count`.
+
+### 2. AI Sales Assistant
+
+- `POST /api/v1/assistant/ask` + `/assistant` chat page.
+- Grounded strictly in the user's own data (volume metrics, campaigns, top
+  leads by score, recent replies); refuses to invent numbers.
+
+### 3. Lead Intent Detection
+
+- `backend/app/services/intent_service.py`: fetches the lead's homepage
+  during qualification and extracts buying signals (hiring, demo/trial CTAs,
+  growth/funding, active buying language, campaign-keyword mentions).
+- Signals sharpen the qualification prompt and appear in the lead's
+  `ai_reasoning` ("| Signals: ..."). Gated by `intent_detection_enabled`
+  (default on); fetch failures never break scoring.
+
+### Other Phase 5 items (not built - need external accounts/credentials)
+
+LinkedIn research, CRM sync (HubSpot/Salesforce), WhatsApp/SMS outreach,
+Google Sheets sync, meeting scheduling, change/competitor monitoring.
+
+### Verification Performed
+
+- Follow-up sweep E2E with fake AI + real MariaDB: eligibility (recently
+  emailed and maxed-out leads excluded), draft -> review with counter
+  increment, idempotent re-sweeps - passed
+- Intent signal extraction on canned page text; signals included in
+  qualification prompts - passed
+- Assistant endpoint (fake AI) returns grounded answers; 400 without provider
+  - passed
+- Frontend tsc + `next build` - passed
+
+---
+
+## Phase 5: Future Enhancements - Roadmap (3 of 11 Delivered)
 
 **Objective:** Architecture supports future expansion.
 
@@ -811,12 +1027,15 @@ smart-reach-ai/
 4. ✅ Iteration 1.5: Crawling & Extraction
 5. ✅ Iteration 1.6: Export & Phase 1 Complete
 
-**Phase 1 MVP complete.** Next: Phase 2 - AI Qualification & Email Generation.
+**Phase 1 MVP complete.** Core roadmap complete. Optional next steps: remaining Phase 5 enhancements, production deployment (OpenTofu plan), MariaDB upgrade.
 5. ⏳ Iteration 1.6: Export & Phase 1 Complete
 
 ### Short-term (Next 2-4 Weeks)
-- Phase 2: AI Qualification & Email Generation
-- Phase 3: Email Sending & Human Approval
+- ✅ Phase 2: AI Qualification & Email Generation
+- ✅ Phase 3: Email Sending & Human Approval
+- ✅ Phase 4: Reply Detection & Analytics
+- ✅ Phase 5: Future Enhancements (3 delivered)
+- ⏳ Remaining roadmap: CRM sync, LinkedIn, WhatsApp/SMS, Sheets, scheduling, monitoring
 
 ### Medium-term (1-2 Months)
 - Phase 4: Reply Detection & Analytics
@@ -844,4 +1063,4 @@ smart-reach-ai/
 
 **End of Development Plan**
 
-Next: Phase 2 - AI Qualification & Email Generation
+Core roadmap complete. Optional next steps: remaining Phase 5 enhancements, production deployment (OpenTofu plan), MariaDB upgrade

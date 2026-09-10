@@ -41,6 +41,20 @@ export default function Header({ title, description, action }: HeaderProps) {
           </div>
 
           <div className="flex items-center gap-4">
+            <nav className="hidden sm:flex items-center gap-4 text-sm mr-2">
+              <Link href="/campaigns" className="text-blue-600 hover:text-blue-700 dark:text-blue-400 font-medium">
+                Campaigns
+              </Link>
+              <Link href="/replies" className="text-blue-600 hover:text-blue-700 dark:text-blue-400 font-medium">
+                Replies
+              </Link>
+              <Link href="/analytics" className="text-blue-600 hover:text-blue-700 dark:text-blue-400 font-medium">
+                Analytics
+              </Link>
+              <Link href="/assistant" className="text-blue-600 hover:text-blue-700 dark:text-blue-400 font-medium">
+                Assistant
+              </Link>
+            </nav>
             {action && <div>{action}</div>}
 
             {/* User Menu */}

@@ -1,10 +1,21 @@
 'use client';
 
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import Link from 'next/link';
+import Logo from '@/components/Logo';
 
 export default function HomePage() {
   const { isAuthenticated, user, isLoading } = useAuth();
+  const router = useRouter();
+
+  // Signed-in users go straight to their dashboard
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      router.replace('/dashboard');
+    }
+  }, [isLoading, isAuthenticated, router]);
 
   if (isLoading) {
     return (
@@ -21,11 +32,16 @@ export default function HomePage() {
           <div className="flex justify-between items-center mb-8">
             <div>
               <h1 className="text-4xl font-bold text-gray-900 dark:text-white">
-                AI Lead Generation Platform
+                Smart Reach <span className="text-indigo-500">AI</span>
               </h1>
-              <p className="text-gray-600 dark:text-gray-400 mt-2">
-                {isAuthenticated && user ? `Welcome, ${user.name || user.email}!` : 'Discover, Qualify, Outreach'}
+              <p className="text-gray-500 dark:text-gray-400 mt-2 text-sm font-medium tracking-wide uppercase">
+                Discover. Engage. Convert.
               </p>
+              {isAuthenticated && user && (
+                <p className="text-gray-600 dark:text-gray-400 mt-1">
+                  Welcome back, {user.name || user.email}!
+                </p>
+              )}
             </div>
             {isAuthenticated ? (
               <Link
@@ -93,15 +109,17 @@ export default function HomePage() {
           </div>
 
           <div className="mt-12 p-6 bg-blue-600 dark:bg-blue-700 rounded-lg shadow-lg text-white">
-            <p className="text-lg mb-2">Implementation Status — Phase 1 MVP Complete ✅</p>
+            <p className="text-lg mb-2">Everything you need, end to end ✅</p>
             <p className="text-blue-100">
-              ✓ 1.1 Project Setup &nbsp;•&nbsp; ✓ 1.2 Authentication &nbsp;•&nbsp; ✓ 1.3 Lead
-              Management &nbsp;•&nbsp; ✓ 1.4 Search &amp; Discovery &nbsp;•&nbsp; ✓ 1.5 Crawling
-              &amp; Extraction &nbsp;•&nbsp; ✓ 1.6 Export &amp; Statistics
+              ✓ Discover leads &nbsp;•&nbsp; ✓ AI qualification &nbsp;•&nbsp; ✓ Personalized
+              outreach &nbsp;•&nbsp; ✓ Human-approved sending &nbsp;•&nbsp; ✓ Reply detection
+              &amp; analytics
             </p>
-            <p className="text-blue-200 text-sm mt-2">
-              Next up: Phase 2 — AI Qualification &amp; Email Generation
-            </p>
+            {isAuthenticated && (
+              <p className="text-blue-200 text-sm mt-3">
+                Head to your <Link href="/dashboard" className="underline font-medium">dashboard</Link> to see your pipeline.
+              </p>
+            )}
           </div>
         </div>
       </div>

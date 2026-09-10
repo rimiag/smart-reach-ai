@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { api } from '@/lib/api';
 import type { Campaign, DashboardStats } from '@/types';
 import Link from 'next/link';
+import AppShell from '@/components/AppShell';
 import Header from '@/components/Header';
 import StatsCards from '@/components/StatsCards';
 
@@ -53,7 +54,7 @@ export default function CampaignsPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <AppShell>
       <Header
         title="Campaigns"
         description="Manage your lead generation campaigns"
@@ -177,6 +178,6 @@ export default function CampaignsPage() {
           </div>
         )}
       </div>
-    </main>
+    </AppShell>
   );
 }

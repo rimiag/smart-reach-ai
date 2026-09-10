@@ -29,6 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agents.search_agent import SearchAgent
 from app.core.config import settings
 from app.db.base import AsyncSessionLocal
+from app.integrations.ai_base import AIProviderError
 from app.integrations.search_base import SearchProviderError, SearchResult
 from app.models.campaign import Campaign
 from app.models.research_result import ResearchResult
@@ -67,8 +68,26 @@ async def run_campaign_search_async(campaign_id: int) -> Dict[str, Any]:
             raise
 
     # Search session closed. Hand off to the crawl phase (Iteration 1.5) in
-    # the same run - it owns finalizing campaign status and progress.
-    summary["crawl"] = await run_campaign_crawl_async(campaign_id)
+    # the same run, then to AI qualification (Phase 2) when enabled. The last
+    # phase owns finalizing campaign status and progress.
+    summary["crawl"] = await run_campaign_crawl_async(campaign_id, finalize=False)
+
+    if settings.ai_auto_qualify:
+        try:
+            from app.tasks.qualify_tasks import run_campaign_qualification_async
+
+            summary["qualification"] = await run_campaign_qualification_async(campaign_id)
+        except AIProviderError as exc:
+            # No AI provider configured - leads stay 'new'; not a run failure.
+            logger.info("Skipping AI qualification for campaign %d: %s", campaign_id, exc)
+        except Exception:
+            # Qualification failures must not fail the research run: leads
+            # were created and remain reviewable.
+            logger.exception("AI qualification failed for campaign %d", campaign_id)
+
+    from app.tasks.crawl_tasks import finalize_campaign
+
+    await finalize_campaign(campaign_id)
     return summary
 
 

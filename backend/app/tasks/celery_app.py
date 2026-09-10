@@ -41,14 +41,42 @@ celery_app.conf.update(
         "app.tasks.search_tasks.*": {"queue": "search"},
         "app.tasks.crawl_tasks.*": {"queue": "crawl"},
         "app.tasks.qualify_tasks.*": {"queue": "ai"},
+        "app.tasks.followup_tasks.*": {"queue": "ai"},
         "app.tasks.email_tasks.send_email": {"queue": "email"},
     },
 )
 
 # -----------------------------------------------------------------------------
-# Task Auto-discovery
+# Task Registration
 # -----------------------------------------------------------------------------
+# Import every task module explicitly so their @task decorators register with
+# this app in the worker process (autodiscovery does not reliably import these
+# modules since the package does not follow the <pkg>.tasks layout).
+from app.tasks import crawl_tasks  # noqa: E402, F401
+from app.tasks import email_tasks  # noqa: E402, F401
+from app.tasks import followup_tasks  # noqa: E402, F401
+from app.tasks import qualify_tasks  # noqa: E402, F401
+from app.tasks import reply_tasks  # noqa: E402, F401
+from app.tasks import search_tasks  # noqa: E402, F401
+from app.tasks import send_tasks  # noqa: E402, F401
+
 celery_app.autodiscover_tasks(["app.tasks"])
+
+# -----------------------------------------------------------------------------
+# Periodic Tasks (Celery beat) - reply detection + follow-up sweeps
+# -----------------------------------------------------------------------------
+beat_schedule: dict = {}
+if settings.reply_check_enabled:
+    beat_schedule["check-replies-periodically"] = {
+        "task": "app.tasks.reply_tasks.check_replies",
+        "schedule": float(settings.reply_check_interval_minutes * 60),
+    }
+if settings.follow_up_enabled:
+    beat_schedule["followup-sweep-daily"] = {
+        "task": "app.tasks.followup_tasks.followup_sweep",
+        "schedule": 86400.0,  # once a day
+    }
+celery_app.conf.beat_schedule = beat_schedule
 
 
 # -----------------------------------------------------------------------------

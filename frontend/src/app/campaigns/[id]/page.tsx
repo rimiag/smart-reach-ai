@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import type { Campaign, CampaignStats } from '@/types';
 import ResearchProgress from '@/components/ResearchProgress';
+import StageIndicator from '@/components/StageIndicator';
 import StatsCards from '@/components/StatsCards';
 import Link from 'next/link';
 
@@ -17,6 +18,17 @@ export default function CampaignDetailPage() {
   const [leadsCount, setLeadsCount] = useState<number>(0);
   const [researchActive, setResearchActive] = useState(false);
   const [isStartingResearch, setIsStartingResearch] = useState(false);
+  const [aiMessage, setAiMessage] = useState('');
+
+  const stageIndex =
+    {
+      draft: 0,
+      researching: 1,
+      ready: 2,
+      active: 3,
+      paused: 3,
+      completed: 4,
+    }[campaign?.status ?? 'draft'] ?? 0;
 
   const fetchCampaign = useCallback(async () => {
     try {
@@ -83,6 +95,75 @@ export default function CampaignDetailPage() {
     fetchLeadsCount();
   };
 
+  // Poll the review queue so AI background runs are visible in the UI.
+  const pollReviewProgress = async (label: string) => {
+    if (!campaign) return;
+    const attempts = 15;
+    let lastTotal = -1;
+    for (let i = 0; i < attempts; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 4000));
+      try {
+        const response = await api.getLeads({
+          campaign_id: campaign.id,
+          status: 'review',
+          per_page: 1,
+        });
+        lastTotal = response.data.total || 0;
+        setAiMessage(`${label} running - ${lastTotal} lead${lastTotal === 1 ? '' : 's'} in review queue`);
+      } catch {
+        // transient poll errors are not worth surfacing
+      }
+    }
+    fetchLeadsCount();
+    fetchCampaign();
+    setAiMessage(`${label} finished - ${Math.max(lastTotal, 0)} lead(s) in the review queue`);
+  };
+
+  const handleQualify = async () => {
+    if (!campaign) return;
+    setAiMessage('');
+    setError('');
+    try {
+      const response = await api.qualifyCampaign(campaign.id);
+      setAiMessage(`${response.data?.message || 'AI qualification started'} - checking progress...`);
+      pollReviewProgress('AI qualification');
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: { error?: { message?: string } } } };
+      const message = axiosError.response?.data?.error?.message || 'Failed to start qualification';
+      setError(message);
+    }
+  };
+
+  const handleGenerateFollowups = async () => {
+    if (!campaign) return;
+    setAiMessage('');
+    setError('');
+    try {
+      const response = await api.generateCampaignFollowups(campaign.id);
+      setAiMessage(`${response.data?.message || 'Follow-up generation started'} - checking progress...`);
+      pollReviewProgress('Follow-up generation');
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: { error?: { message?: string } } } };
+      const message = axiosError.response?.data?.error?.message || 'Failed to start follow-up generation';
+      setError(message);
+    }
+  };
+
+  const handleGenerateEmails = async () => {
+    if (!campaign) return;
+    setAiMessage('');
+    setError('');
+    try {
+      const response = await api.generateCampaignEmails(campaign.id);
+      setAiMessage(`${response.data?.message || 'Email generation started'} - checking progress...`);
+      pollReviewProgress('Email generation');
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: { error?: { message?: string } } } };
+      const message = axiosError.response?.data?.error?.message || 'Failed to start email generation';
+      setError(message);
+    }
+  };
+
   if (isLoading) {
     return (
       <main className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
@@ -118,6 +199,8 @@ export default function CampaignDetailPage() {
               ← Back to Campaigns
             </Link>
           </div>
+
+          <StageIndicator current={stageIndex} />
 
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-8">
             <div className="flex justify-between items-start mb-6">
@@ -199,7 +282,41 @@ export default function CampaignDetailPage() {
               </div>
             )}
 
-            <div className="flex justify-end gap-4 mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
+            <div className="flex flex-wrap justify-end gap-4 mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
+              {campaign.status !== 'draft' && (
+                <>
+                  <button
+                    onClick={handleQualify}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-md transition-colors"
+                  >
+                    🤖 Qualify with AI
+                  </button>
+                  <button
+                    onClick={handleGenerateEmails}
+                    className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-md transition-colors"
+                  >
+                    ✉ Generate Emails
+                  </button>
+                  <button
+                    onClick={handleGenerateFollowups}
+                    className="bg-teal-600 hover:bg-teal-700 text-white px-6 py-2 rounded-md transition-colors"
+                  >
+                    ↻ Generate Follow-ups
+                  </button>
+                  <Link
+                    href={`/leads/review?campaign_id=${campaign.id}`}
+                    className="bg-yellow-600 hover:bg-yellow-700 text-white px-6 py-2 rounded-md transition-colors flex items-center gap-2"
+                  >
+                    Review Queue
+                  </Link>
+                  <Link
+                    href={`/campaigns/${campaign.id}/approve`}
+                    className="bg-blue-700 hover:bg-blue-800 text-white px-6 py-2 rounded-md transition-colors flex items-center gap-2"
+                  >
+                    📨 Review & Send
+                  </Link>
+                </>
+              )}
               {/* View Leads Button */}
               <Link
                 href={`/leads?campaign_id=${campaign.id}`}
@@ -230,6 +347,12 @@ export default function CampaignDetailPage() {
               )}
             </div>
           </div>
+
+          {aiMessage && (
+            <div className="mt-6 p-4 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 text-indigo-800 dark:text-indigo-300 px-4 py-3 rounded-md text-sm">
+              {aiMessage} - check the review queue or leads list in a minute.
+            </div>
+          )}
 
           {stats && (
             <div className="mt-6">

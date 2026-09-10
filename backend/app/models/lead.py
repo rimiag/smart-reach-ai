@@ -177,6 +177,11 @@ class Lead(Base):
         nullable=False,
     )
 
+    follow_up_count: Mapped[int] = mapped_column(
+        default=0,
+        nullable=False,
+    )
+
     last_emailed_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime,
         nullable=True,

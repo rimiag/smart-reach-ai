@@ -15,7 +15,19 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.api.v1 import admin, analytics, auth, campaigns, emails, leads, suppression
+from app.api.v1 import (
+    admin,
+    analytics,
+    assistant,
+    auth,
+    campaigns,
+    emails,
+    leads,
+    replies,
+    suppression,
+    unsubscribe,
+    webhooks,
+)
 from app.core.config import settings
 from app.db.base import engine
 
@@ -100,12 +112,24 @@ async def http_exception_handler(request, exc):
 
 @app.exception_handler(Exception)
 async def general_exception_handler(request, exc):
-    """General exception handler for uncaught errors."""
+    """
+    General exception handler for uncaught errors.
+
+    This handler runs on the OUTERMOST middleware layer (outside CORSMiddleware),
+    so unhandled 500 responses would otherwise leave without CORS headers and be
+    reported by browsers as CORS failures - masking the real server error. The
+    origin header is echoed back explicitly when it is an allowed origin.
+    """
     logger.error(f"Unhandled exception: {exc}", exc_info=True)
-    return JSONResponse(
+    response = JSONResponse(
         status_code=500,
         content={"error": {"code": 500, "message": "Internal server error"}},
     )
+    origin = request.headers.get("origin")
+    if origin and origin in settings.cors_origins_list:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+    return response
 
 
 # -----------------------------------------------------------------------------
@@ -118,6 +142,10 @@ app.include_router(campaigns.router, prefix=f"{api_prefix}/campaigns", tags=["Ca
 app.include_router(leads.router, prefix=f"{api_prefix}/leads", tags=["Leads"])
 app.include_router(emails.router, prefix=f"{api_prefix}/emails", tags=["Emails"])
 app.include_router(suppression.router, prefix=f"{api_prefix}/suppression", tags=["Suppression"])
+app.include_router(unsubscribe.router, prefix=f"{api_prefix}/unsubscribe", tags=["Unsubscribe"])
+app.include_router(replies.router, prefix=f"{api_prefix}/replies", tags=["Replies"])
+app.include_router(webhooks.router, prefix=f"{api_prefix}/webhooks", tags=["Webhooks"])
+app.include_router(assistant.router, prefix=f"{api_prefix}/assistant", tags=["Assistant"])
 app.include_router(analytics.router, prefix=f"{api_prefix}/analytics", tags=["Analytics"])
 app.include_router(admin.router, prefix=f"{api_prefix}/admin", tags=["Admin"])
 

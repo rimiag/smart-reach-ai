@@ -96,6 +96,31 @@ export interface DashboardStats {
   websites_crawled: number;
 }
 
+export interface ReplyItem {
+  id: number;
+  campaign_id: number;
+  lead_id: number;
+  from_email: string;
+  from_name?: string;
+  subject?: string;
+  body: string;
+  category: string;
+  ai_summary?: string;
+  status: 'unread' | 'read';
+  received_at?: string;
+  created_at?: string;
+}
+
+export interface ReplyAnalytics {
+  total_replies: number;
+  unread_replies: number;
+  replies_last_7_days: number;
+  by_category: Record<string, number>;
+  reply_rate_percent: number;
+  emails_sent: number;
+  last_reply_at?: string | null;
+}
+
 export interface CampaignComparison {
   campaign_id: number;
   campaign_name: string;

@@ -114,6 +114,9 @@ export const api = {
   startResearch: (id: number) => apiClient.post(`/campaigns/${id}/start`),
   getResearchProgress: (id: number) => apiClient.get(`/campaigns/${id}/progress`),
   getCampaignStats: (id: number) => apiClient.get(`/campaigns/${id}/stats`),
+  qualifyCampaign: (id: number) => apiClient.post(`/campaigns/${id}/qualify`),
+  generateCampaignEmails: (id: number) => apiClient.post(`/campaigns/${id}/generate-emails`),
+  generateCampaignFollowups: (id: number) => apiClient.post(`/campaigns/${id}/generate-followups`),
 
   // Leads
   getLeads: (params?: Record<string, unknown>) =>
@@ -143,6 +146,15 @@ export const api = {
   rejectLead: (id: number) => apiClient.post(`/leads/${id}/reject`),
   bulkApprove: (data: { ids: number[] }) => apiClient.post('/leads/bulk-approve', data),
   bulkReject: (data: { ids: number[] }) => apiClient.post('/leads/bulk-reject', data),
+  qualifyLead: (id: number) => apiClient.post(`/leads/${id}/qualify`),
+  regenerateLeadEmail: (id: number) => apiClient.post(`/leads/${id}/regenerate`),
+  updateLeadDraft: (id: number, data: { subject: string; body: string }) =>
+    apiClient.put(`/leads/${id}/draft`, data),
+  approveAllLeads: (id: number) => apiClient.post(`/campaigns/${id}/approve-all`),
+  sendCampaignEmails: (
+    id: number,
+    data: { sender_name: string; sender_company?: string; from_email: string; reply_to?: string }
+  ) => apiClient.post(`/campaigns/${id}/send`, data),
   exportLeads: (params: Record<string, unknown>) =>
     apiClient.get('/leads/export', { params, responseType: 'blob' }),
 
@@ -158,6 +170,14 @@ export const api = {
   addToSuppression: (data: { email?: string; domain?: string; reason: string }) =>
     apiClient.post('/suppression', data),
   removeFromSuppression: (id: number) => apiClient.delete(`/suppression/${id}`),
+
+  // Assistant (Phase 5)
+  askAssistant: (data: { question: string }) => apiClient.post('/assistant/ask', data),
+
+  // Replies (Phase 4)
+  getReplies: (params?: Record<string, unknown>) => apiClient.get('/replies', { params }),
+  markReplyRead: (id: number) => apiClient.patch(`/replies/${id}/read`),
+  checkReplies: () => apiClient.get('/replies/check'),
 
   // Analytics
   getDashboardStats: () => apiClient.get('/analytics/dashboard'),

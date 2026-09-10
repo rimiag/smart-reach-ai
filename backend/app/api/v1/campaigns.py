@@ -15,7 +15,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agents.search_agent import SearchAgent
 from app.db.base import get_db
 from app.dependencies import get_current_user
+from app.integrations.ai_base import AIProviderError, get_ai_client
 from app.integrations.search_base import SearchProviderError
+from app.integrations.smtp_client import smtp_client
 from app.models.campaign import Campaign
 from app.models.lead import Lead
 from app.models.research_result import ResearchResult
@@ -26,7 +28,8 @@ from app.schemas.campaign import (
     CampaignUpdate,
     ResearchProgress,
 )
-from app.schemas.common import PaginatedResponse
+from app.schemas.common import MessageResponse, PaginatedResponse
+from app.schemas.email import SendRequest
 from app.schemas.user import UserResponse
 from app.services.analytics_service import analytics_service
 from app.services.campaign_service import campaign_service
@@ -40,6 +43,24 @@ router = APIRouter()
 # Keep references to in-process research tasks so they are not garbage
 # collected mid-run (laptop-dev fallback when no Redis broker is available).
 _background_research_tasks: set = set()
+
+
+def _dispatch_or_run(celery_task, async_fn, *args) -> MessageResponse:
+    """
+    Dispatch a task to Celery, falling back to in-process execution when no
+    broker is available (local development without Redis).
+    """
+    try:
+        # retry=False: fail fast when no broker is reachable (local dev) so the
+        # in-process fallback runs immediately instead of after a ~60s retry.
+        celery_task.apply_async(args=list(args), retry=False)
+        return MessageResponse(message="Task queued")
+    except Exception as exc:
+        logger.warning("Celery broker unavailable (%s); running in-process", exc)
+        task = asyncio.create_task(async_fn(*args))
+        _background_research_tasks.add(task)
+        task.add_done_callback(_background_research_tasks.discard)
+        return MessageResponse(message="Task started in background")
 
 
 @router.get("", response_model=PaginatedResponse[CampaignResponse])
@@ -246,7 +267,9 @@ async def start_research(
     # same async orchestration in this process (laptop dev without Redis).
     dispatched_via_celery = False
     try:
-        run_campaign_search.delay(updated_campaign.id)
+        # retry=False: fail fast without a broker (local dev) so the
+        # in-process fallback starts immediately.
+        run_campaign_search.apply_async(args=[updated_campaign.id], retry=False)
         dispatched_via_celery = True
     except Exception as exc:
         logger.warning(
@@ -376,3 +399,235 @@ async def get_campaign_stats(
 
     # Live statistics from the analytics service (Iteration 1.6)
     return await analytics_service.get_campaign_stats(db, campaign_id)
+
+
+@router.post("/{campaign_id}/qualify", response_model=MessageResponse)
+async def qualify_campaign_leads(
+    campaign_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[UserResponse, Depends(get_current_user)],
+):
+    """
+    AI-qualify the campaign's unscored (``new``) leads.
+
+    Scores each lead 0-100 with reasoning and moves it to ``review`` for the
+    human decision queue. Requires an AI provider (ANTHROPIC_API_KEY or
+    OPENAI_API_KEY).
+    """
+    campaign = await campaign_service.get_campaign(db, campaign_id)
+
+    if not campaign:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found")
+
+    if campaign.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to access this campaign",
+        )
+
+    try:
+        get_ai_client()
+    except AIProviderError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+    from app.tasks.qualify_tasks import qualify_campaign, run_campaign_qualification_async
+
+    return _dispatch_or_run(qualify_campaign, run_campaign_qualification_async, campaign_id)
+
+
+@router.post("/{campaign_id}/generate-emails", response_model=MessageResponse)
+async def generate_campaign_email_drafts(
+    campaign_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[UserResponse, Depends(get_current_user)],
+):
+    """
+    Generate personalized outreach email drafts for the campaign's
+    review-ready leads (leads without an existing draft first).
+    """
+    campaign = await campaign_service.get_campaign(db, campaign_id)
+
+    if not campaign:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found")
+
+    if campaign.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to access this campaign",
+        )
+
+    try:
+        get_ai_client()
+    except AIProviderError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+    from app.tasks.email_tasks import generate_campaign_emails, run_campaign_email_generation_async
+
+    return _dispatch_or_run(
+        generate_campaign_emails, run_campaign_email_generation_async, campaign_id
+    )
+
+
+@router.post("/{campaign_id}/generate-followups", response_model=MessageResponse)
+async def generate_followup_drafts(
+    campaign_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[UserResponse, Depends(get_current_user)],
+):
+    """
+    AI-draft follow-up emails for this campaign's silent leads (sent but no
+    reply after the configured window). Drafts land in the review queue for
+    human approval before sending.
+    """
+    campaign = await campaign_service.get_campaign(db, campaign_id)
+
+    if not campaign:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found")
+
+    if campaign.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to access this campaign",
+        )
+
+    try:
+        get_ai_client()
+    except AIProviderError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+    from app.tasks.followup_tasks import followup_sweep, run_followup_sweep_async
+
+    return _dispatch_or_run(followup_sweep, run_followup_sweep_async, campaign_id)
+
+
+@router.post("/{campaign_id}/approve-all", response_model=MessageResponse)
+async def approve_all_reviewed_leads(
+    campaign_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[UserResponse, Depends(get_current_user)],
+):
+    """
+    Approve every reviewed lead of this campaign that has an email draft -
+    the one-click step before starting a send.
+    """
+    campaign = await campaign_service.get_campaign(db, campaign_id)
+
+    if not campaign:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found")
+
+    if campaign.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to access this campaign",
+        )
+
+    leads = (
+        (
+            await db.execute(
+                select(Lead)
+                .where(Lead.campaign_id == campaign_id)
+                .where(Lead.status == "review")
+                .where(Lead.generated_email.is_not(None))
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    from datetime import datetime
+
+    for lead in leads:
+        lead.status = "approved"
+        lead.approved_at = datetime.utcnow()
+    await db.commit()
+
+    return MessageResponse(message=f"{len(leads)} lead(s) approved for sending")
+
+
+@router.post("/{campaign_id}/send", response_model=MessageResponse)
+async def send_campaign_emails(
+    campaign_id: int,
+    payload: SendRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[UserResponse, Depends(get_current_user)],
+):
+    """
+    Start sending approved outreach emails for this campaign.
+
+    Explicit human action: only leads you approved (with email drafts) are
+    sent, respecting suppression, cooldowns and daily/hourly limits.
+    """
+    campaign = await campaign_service.get_campaign(db, campaign_id)
+
+    if not campaign:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found")
+
+    if campaign.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to access this campaign",
+        )
+
+    if not smtp_client.is_configured:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="SMTP is not configured - set SMTP_HOST, SMTP_USER and SMTP_PASSWORD",
+        )
+
+    ready = await db.scalar(
+        select(func.count(Lead.id)).where(
+            Lead.campaign_id == campaign_id,
+            Lead.status == "approved",
+            Lead.generated_email.is_not(None),
+        )
+    )
+    if not ready:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No approved leads with email drafts - approve leads first",
+        )
+
+    # Remember the sender identity for the next send (prefill in the UI).
+    settings_map = dict(campaign.settings or {})
+    settings_map.update(
+        {
+            "sender_name": payload.sender_name,
+            "sender_company": payload.sender_company,
+            "from_email": str(payload.from_email),
+            "reply_to": str(payload.reply_to) if payload.reply_to else "",
+        }
+    )
+    campaign.settings = settings_map
+    campaign.status = "active"
+    await db.commit()
+
+    from app.tasks.send_tasks import send_campaign_emails as send_task
+
+    dispatch = _dispatch_or_run(
+        send_task,
+        _send_campaign_runner,
+        campaign_id,
+        payload.sender_name,
+        payload.sender_company,
+        str(payload.from_email),
+        str(payload.reply_to or ""),
+    )
+    return MessageResponse(
+        message=f"{dispatch.message} - sending {ready} approved email(s) from "
+        f"{payload.sender_name} <{payload.from_email}>"
+    )
+
+
+async def _send_campaign_runner(
+    campaign_id: int, sender_name: str, sender_company: str, from_email: str, reply_to: str
+):
+    """In-process fallback runner (matches the Celery task signature)."""
+    from app.services.email_service import email_service
+
+    return await email_service.send_campaign(
+        campaign_id,
+        sender_name=sender_name,
+        sender_company=sender_company,
+        from_email=from_email,
+        reply_to=reply_to,
+    )

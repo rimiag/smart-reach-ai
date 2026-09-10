@@ -41,7 +41,5 @@ async def get_reply_analytics(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[UserResponse, Depends(get_current_user)],
 ):
-    """
-    Reply analytics - implemented in Phase 4 (reply detection & classification).
-    """
-    return {"message": "Reply analytics arrive with Phase 4 (reply detection)"}
+    """Reply volume and category breakdown (Phase 4)."""
+    return await analytics_service.get_reply_analytics(db, current_user.id)

@@ -6,6 +6,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { api } from '@/lib/api';
 import type { Lead } from '@/types';
 import Link from 'next/link';
+import AppShell from '@/components/AppShell';
 import Header from '@/components/Header';
 
 export default function LeadDetailPage() {
@@ -16,6 +17,11 @@ export default function LeadDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isEditingDraft, setIsEditingDraft] = useState(false);
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
+  const [draftSubject, setDraftSubject] = useState('');
+  const [draftBody, setDraftBody] = useState('');
+  const [draftMessage, setDraftMessage] = useState('');
 
   useEffect(() => {
     if (!isAuthenticated || !id) return;
@@ -69,6 +75,99 @@ export default function LeadDetailPage() {
       setError(message);
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  const handleQualify = async () => {
+    if (!lead) return;
+
+    try {
+      setIsProcessing(true);
+      setError('');
+      const response = await api.qualifyLead(lead.id);
+      setLead(response.data);
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: { error?: { message?: string } } } };
+      const message = axiosError.response?.data?.error?.message || 'AI qualification failed';
+      setError(message);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleGenerateEmail = async () => {
+    if (!lead) return;
+
+    try {
+      setIsProcessing(true);
+      setError('');
+      const response = await api.regenerateLeadEmail(lead.id);
+      setLead(response.data);
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: { error?: { message?: string } } } };
+      const message = axiosError.response?.data?.error?.message || 'AI email generation failed';
+      setError(message);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // ------------------------------------------------------------------
+  // Draft editing: split "Subject: ...\n\nBody" into editable fields
+  // ------------------------------------------------------------------
+  const splitDraft = (email: string): { subject: string; body: string } => {
+    const withoutPrefix = email.replace(/^Subject:\s*/i, '');
+    const newlineIndex = withoutPrefix.indexOf('\n');
+    if (newlineIndex === -1) return { subject: withoutPrefix.trim(), body: '' };
+    return {
+      subject: withoutPrefix.slice(0, newlineIndex).trim(),
+      body: withoutPrefix.slice(newlineIndex + 1).trim(),
+    };
+  };
+
+  const startEditDraft = () => {
+    if (!lead?.generated_email) return;
+    const { subject, body } = splitDraft(lead.generated_email);
+    setDraftSubject(subject);
+    setDraftBody(body);
+    setIsEditingDraft(true);
+    setDraftMessage('');
+  };
+
+  const cancelEditDraft = () => {
+    setIsEditingDraft(false);
+    setDraftMessage('');
+  };
+
+  const saveDraft = async (verify: boolean) => {
+    if (!lead) return;
+    setIsSavingDraft(true);
+    setDraftMessage('');
+    setError('');
+    try {
+      const response = await api.updateLeadDraft(lead.id, {
+        subject: draftSubject,
+        body: draftBody,
+      });
+      let updated = response.data as Lead;
+      if (verify && updated.status === 'review') {
+        const approveResponse = await api.approveLead(updated.id);
+        updated = approveResponse.data as Lead;
+      }
+      setLead(updated);
+      setIsEditingDraft(false);
+      setDraftMessage(
+        verify && updated.status === 'approved'
+          ? 'Draft saved and verified - it is now available in Review & Send.'
+          : 'Draft saved.'
+      );
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: { error?: { message?: string } } } };
+      const message = axiosError.response?.data?.error?.message || 'Failed to save draft';
+      setError(message);
+      setDraftMessage(message);
+    } finally {
+      setIsSavingDraft(false);
     }
   };
 
@@ -168,7 +267,7 @@ export default function LeadDetailPage() {
   const canReject = ['new', 'qualified', 'review'].includes(lead.status);
 
   return (
-    <main className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <AppShell>
       <Header
         title="Lead Details"
         description={`Organization: ${lead.organization_name}`}
@@ -247,6 +346,20 @@ export default function LeadDetailPage() {
               {isProcessing ? 'Processing...' : '✗ Reject'}
             </button>
           )}
+          <button
+            onClick={handleQualify}
+            disabled={isProcessing}
+            className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isProcessing ? 'Working...' : '🤖 Qualify with AI'}
+          </button>
+          <button
+            onClick={handleGenerateEmail}
+            disabled={isProcessing}
+            className="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isProcessing ? 'Working...' : '✉ Generate Email'}
+          </button>
           <Link
             href={`/campaigns/${lead.campaign_id}`}
             className="px-6 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-md transition-colors"
@@ -395,6 +508,102 @@ export default function LeadDetailPage() {
             </div>
           )}
 
+          {/* Email Draft (editable) */}
+          {lead.generated_email && (
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 md:col-span-2">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                  Outreach Email Draft
+                </h2>
+                <div className="flex items-center gap-4">
+                  {!isEditingDraft && (
+                    <button
+                      onClick={startEditDraft}
+                      disabled={isProcessing}
+                      className="text-sm text-blue-600 hover:text-blue-700 font-medium disabled:opacity-50"
+                    >
+                      ✏ Edit draft
+                    </button>
+                  )}
+                  <button
+                    onClick={handleGenerateEmail}
+                    disabled={isProcessing || isEditingDraft}
+                    className="text-sm text-purple-600 hover:text-purple-700 font-medium disabled:opacity-50"
+                  >
+                    {isProcessing ? 'Regenerating...' : '↻ Regenerate'}
+                  </button>
+                </div>
+              </div>
+
+              {isEditingDraft ? (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm text-gray-500 dark:text-gray-400 mb-1">
+                      Subject
+                    </label>
+                    <input
+                      value={draftSubject}
+                      onChange={(e) => setDraftSubject(e.target.value)}
+                      maxLength={255}
+                      className="w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-500 dark:text-gray-400 mb-1">
+                      Body
+                    </label>
+                    <textarea
+                      value={draftBody}
+                      onChange={(e) => setDraftBody(e.target.value)}
+                      rows={12}
+                      className="w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm"
+                    />
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button
+                      onClick={() => saveDraft(false)}
+                      disabled={isSavingDraft || !draftSubject.trim() || !draftBody.trim()}
+                      className="bg-gray-600 hover:bg-gray-700 disabled:opacity-50 text-white px-4 py-2 rounded-md text-sm transition-colors"
+                    >
+                      {isSavingDraft ? 'Saving...' : 'Save draft'}
+                    </button>
+                    {lead.status === 'review' && (
+                      <button
+                        onClick={() => saveDraft(true)}
+                        disabled={isSavingDraft || !draftSubject.trim() || !draftBody.trim()}
+                        className="bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-4 py-2 rounded-md text-sm transition-colors"
+                      >
+                        {isSavingDraft ? 'Saving...' : 'Save & verify for sending'}
+                      </button>
+                    )}
+                    <button
+                      onClick={cancelEditDraft}
+                      disabled={isSavingDraft}
+                      className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 font-medium"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <pre className="whitespace-pre-wrap bg-gray-50 dark:bg-gray-900/50 rounded-md p-4 text-sm text-gray-800 dark:text-gray-200">
+                    {lead.generated_email}
+                  </pre>
+                  {draftMessage && (
+                    <p className="mt-2 text-sm text-green-600 dark:text-green-400">{draftMessage}</p>
+                  )}
+                  <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
+                    Draft only - emails are never sent without your explicit approval. Edit the
+                    draft, then use "Save &amp; verify for sending" to make it available in
+                    Review &amp; Send. {'{{SENDER_NAME}}'} / {'{{SENDER_COMPANY}}'} placeholders
+                    are filled at send time.
+                  </p>
+                </>
+              )}
+            </div>
+          )}
+
           {/* Tracking & Notes */}
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
             <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
@@ -452,6 +661,6 @@ export default function LeadDetailPage() {
           </div>
         </div>
       </div>
-    </main>
+    </AppShell>
   );
 }

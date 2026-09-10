@@ -140,7 +140,34 @@ class Settings(BaseSettings):
     # -----------------------------------------------------------------------------
     anthropic_api_key: str = Field(default="", description="Anthropic API key")
     anthropic_model: str = Field(
-        default="claude-3-5-sonnet-20241022", description="Anthropic model to use"
+        default="claude-haiku-4-5", description="Default Anthropic model for bulk tasks"
+    )
+    anthropic_email_model: str = Field(
+        default="claude-sonnet-5", description="Anthropic model for email generation"
+    )
+
+    # -----------------------------------------------------------------------------
+    # AI Providers - Google Gemini (free tier, OpenAI-compatible endpoint)
+    # -----------------------------------------------------------------------------
+    gemini_api_key: str = Field(default="", description="Google Gemini API key (AI Studio)")
+    gemini_model: str = Field(
+        default="gemini-3.6-flash", description="Gemini model (free tier friendly)"
+    )
+
+    # -----------------------------------------------------------------------------
+    # AI Providers - selection & behaviour (Phase 2)
+    # -----------------------------------------------------------------------------
+    ai_provider: str = Field(
+        default="auto",
+        description="AI provider: auto, anthropic, openai or gemini",
+    )
+    ai_temperature: float = Field(default=0.7, description="Sampling temperature for generation")
+    ai_auto_qualify: bool = Field(
+        default=True,
+        description="Automatically qualify new leads with AI after the crawl phase",
+    )
+    ai_qualification_timeout: int = Field(
+        default=60, description="Per-lead AI request timeout (seconds)"
     )
 
     # -----------------------------------------------------------------------------
@@ -230,6 +257,10 @@ class Settings(BaseSettings):
     default_emails_per_lead_days: int = Field(
         default=7, description="Days between emails to same lead"
     )
+    send_delay_seconds: int = Field(
+        default=30, description="Minimum delay between outbound emails (seconds)"
+    )
+    smtp_from_email: str = Field(default="", description="Default From address for outreach")
 
     # -----------------------------------------------------------------------------
     # File Handling
@@ -251,6 +282,43 @@ class Settings(BaseSettings):
     sentry_dsn: str = Field(default="", description="Sentry DSN for error tracking")
     statsd_host: str = Field(default="", description="StatsD host for metrics")
     statsd_port: int = Field(default=8125, description="StatsD port")
+
+    # -----------------------------------------------------------------------------
+    # Follow-up Sequences (Phase 5)
+    # -----------------------------------------------------------------------------
+    follow_up_enabled: bool = Field(
+        default=True, description="Enable AI-drafted follow-ups for silent leads"
+    )
+    follow_up_after_days: int = Field(
+        default=4, description="Days to wait after a send before drafting a follow-up"
+    )
+    follow_up_max_count: int = Field(default=2, description="Maximum follow-ups per lead")
+
+    # -----------------------------------------------------------------------------
+    # Lead Intent Detection (Phase 5)
+    # -----------------------------------------------------------------------------
+    intent_detection_enabled: bool = Field(
+        default=True,
+        description="Fetch the lead's homepage during qualification to detect intent signals",
+    )
+
+    # -----------------------------------------------------------------------------
+    # Reply Detection (Phase 4) - IMAP mailbox polling
+    # -----------------------------------------------------------------------------
+    imap_host: str = Field(default="", description="IMAP server (e.g. imap.gmail.com)")
+    imap_port: int = Field(default=993, description="IMAP port (SSL)")
+    imap_user: str = Field(default="", description="IMAP username (email address)")
+    imap_password: str = Field(default="", description="IMAP password / app password")
+    imap_folder: str = Field(default="INBOX", description="Mailbox folder to poll")
+    reply_check_enabled: bool = Field(
+        default=True, description="Enable periodic reply checking (Celery beat)"
+    )
+    reply_check_interval_minutes: int = Field(
+        default=15, description="Minutes between reply checks (Celery beat)"
+    )
+    webhook_secret: str = Field(
+        default="", description="Shared secret for inbound webhook calls (optional)"
+    )
 
 
 @lru_cache()

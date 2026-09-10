@@ -84,6 +84,13 @@ class BulkActionRequest(BaseModel):
     ids: list[int] = Field(..., min_length=1, description="List of lead IDs")
 
 
+class LeadDraftUpdate(BaseModel):
+    """Schema for editing a lead's email draft (subject + body separately)."""
+
+    subject: str = Field(..., min_length=1, max_length=255, description="Email subject line")
+    body: str = Field(..., min_length=1, description="Email body text")
+
+
 # -----------------------------------------------------------------------------
 # Response Schemas
 # -----------------------------------------------------------------------------

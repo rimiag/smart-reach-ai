@@ -9,13 +9,16 @@ tracking infrastructure lands.
 """
 
 import logging
+from datetime import datetime, timedelta
 from typing import List
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.campaign import Campaign
+from app.models.email_log import EmailLog
 from app.models.lead import Lead
+from app.models.reply import Reply
 from app.models.research_result import ResearchResult
 from app.schemas.campaign import CampaignComparison, CampaignStats, DashboardStats
 
@@ -171,6 +174,70 @@ class AnalyticsService:
             )
             for campaign in campaigns
         ]
+
+    # ------------------------------------------------------------------
+    # Reply analytics (Phase 4)
+    # ------------------------------------------------------------------
+    async def get_reply_analytics(self, db: AsyncSession, user_id: int) -> dict:
+        """
+        Reply metrics across the user's campaigns: totals, category
+        breakdown, and reply rate against sent outreach.
+        """
+        from datetime import timedelta
+
+        total_replies = (
+            await db.execute(select(func.count(Reply.id)).where(Reply.user_id == user_id))
+        ).scalar() or 0
+
+        unread_replies = (
+            await db.execute(
+                select(func.count(Reply.id)).where(
+                    Reply.user_id == user_id, Reply.status == "unread"
+                )
+            )
+        ).scalar() or 0
+
+        category_rows = (
+            await db.execute(
+                select(Reply.category, func.count(Reply.id))
+                .where(Reply.user_id == user_id)
+                .group_by(Reply.category)
+            )
+        ).all()
+        by_category = {category: count for category, count in category_rows}
+
+        week_ago = datetime.utcnow() - timedelta(days=7)
+        replies_last_7d = (
+            await db.execute(
+                select(func.count(Reply.id)).where(
+                    Reply.user_id == user_id, Reply.created_at >= week_ago
+                )
+            )
+        ).scalar() or 0
+
+        emails_sent = (
+            await db.execute(
+                select(func.count(EmailLog.id)).where(
+                    EmailLog.user_id == user_id, EmailLog.status == "sent"
+                )
+            )
+        ).scalar() or 0
+
+        last_reply_at = (
+            await db.execute(select(func.max(Reply.created_at)).where(Reply.user_id == user_id))
+        ).scalar()
+
+        reply_rate = round(total_replies / emails_sent * 100, 1) if emails_sent else 0.0
+
+        return {
+            "total_replies": total_replies,
+            "unread_replies": unread_replies,
+            "replies_last_7_days": replies_last_7d,
+            "by_category": by_category,
+            "reply_rate_percent": reply_rate,
+            "emails_sent": emails_sent,
+            "last_reply_at": last_reply_at.isoformat() if last_reply_at else None,
+        }
 
 
 analytics_service = AnalyticsService()

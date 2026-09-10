@@ -4,14 +4,18 @@ Leads API Endpoints
 Handles lead management, approval, rejection, and bulk operations.
 """
 
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents.email_agent import EmailGenerationAgent, EmailParseError
+from app.agents.qualification_agent import QualificationAgent, QualificationParseError
 from app.core.config import settings
 from app.db.base import get_db
 from app.dependencies import get_current_user
+from app.integrations.ai_base import AIProviderError
 from app.models.lead import Lead
 from app.schemas.common import BulkActionRequest, PaginatedResponse
 from app.schemas.lead import (
@@ -19,6 +23,7 @@ from app.schemas.lead import (
     LeadActionResponse,
     LeadCreate,
     LeadDetailResponse,
+    LeadDraftUpdate,
     LeadFilter,
     LeadResponse,
     LeadUpdate,
@@ -27,6 +32,7 @@ from app.schemas.user import UserResponse
 from app.services.campaign_service import campaign_service
 from app.services.export_service import export_service
 from app.services.lead_service import lead_service
+from app.services.template_service import template_service
 
 router = APIRouter()
 
@@ -195,6 +201,137 @@ async def get_lead(
     return LeadDetailResponse(
         **lead_data, campaign_name=lead.campaign.name if lead.campaign else "Unknown"
     )
+
+
+async def _get_owned_lead(lead_id: int, db: AsyncSession, current_user: UserResponse) -> Lead:
+    """Load a lead with its campaign and verify ownership (404/403 on failure)."""
+    lead = await lead_service.get_lead(db, lead_id)
+
+    if not lead:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Lead not found",
+        )
+
+    if lead.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to access this lead",
+        )
+
+    return lead
+
+
+@router.put("/{lead_id}/draft", response_model=LeadResponse)
+async def update_lead_draft(
+    lead_id: int,
+    draft_data: LeadDraftUpdate,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[UserResponse, Depends(get_current_user)],
+):
+    """
+    Edit a lead's email draft (subject and body).
+
+    Allowed while the lead is in ``review`` or ``approved`` status, so drafts
+    stay editable right up until they are sent.
+    """
+    lead = await _get_owned_lead(lead_id, db, current_user)
+
+    if lead.status not in ("review", "approved"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Drafts can only be edited for leads in review or approved "
+            f"status (current: {lead.status})",
+        )
+
+    subject = draft_data.subject.strip()
+    body = draft_data.body.strip()
+    if not subject or not body:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Subject and body must not be empty",
+        )
+
+    lead.generated_email = f"Subject: {subject}\n\n{body}"
+    await db.commit()
+    await db.refresh(lead)
+
+    return LeadResponse.model_validate(lead)
+
+
+@router.post("/{lead_id}/qualify", response_model=LeadResponse)
+async def qualify_lead(
+    lead_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[UserResponse, Depends(get_current_user)],
+):
+    """
+    AI-qualify a single lead: score 0-100 with reasoning and move it to
+    ``review``. Requires an AI provider to be configured.
+    """
+    lead = await _get_owned_lead(lead_id, db, current_user)
+
+    try:
+        agent = QualificationAgent()
+    except AIProviderError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+    try:
+        result = await agent.qualify(lead, lead.campaign)
+    except (AIProviderError, QualificationParseError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"AI qualification failed: {exc}",
+        )
+
+    lead.lead_score = result.score
+    reasoning = f"[{result.category}] {result.reasoning}" if result.category else result.reasoning
+    if result.signals:
+        reasoning += f" | Signals: {', '.join(result.signals)}"
+    lead.ai_reasoning = reasoning
+    lead.status = "review"
+    lead.qualified_at = datetime.utcnow()
+    await db.commit()
+    await db.refresh(lead)
+
+    return LeadResponse.model_validate(lead)
+
+
+@router.post("/{lead_id}/regenerate", response_model=LeadResponse)
+async def regenerate_lead_email(
+    lead_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[UserResponse, Depends(get_current_user)],
+):
+    """
+    Generate (or regenerate) the personalized outreach email draft for a
+    single lead. Requires an AI provider to be configured.
+    """
+    lead = await _get_owned_lead(lead_id, db, current_user)
+
+    try:
+        agent = EmailGenerationAgent()
+    except AIProviderError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+    template_hint = template_service.render(
+        template_service.get_template("professional"),
+        {"ORGANIZATION_NAME": lead.organization_name},
+    )
+
+    try:
+        draft = await agent.generate(lead, lead.campaign, template_hint=template_hint)
+    except (AIProviderError, EmailParseError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"AI email generation failed: {exc}",
+        )
+
+    lead.generated_email = f"Subject: {draft.subject}\n\n{draft.body}"
+    await db.commit()
+    await db.refresh(lead)
+
+    return LeadResponse.model_validate(lead)
 
 
 @router.put("/{lead_id}", response_model=LeadResponse)

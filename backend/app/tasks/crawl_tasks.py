@@ -50,9 +50,19 @@ logger = logging.getLogger(__name__)
 # -----------------------------------------------------------------------------
 # Core orchestration (async)
 # -----------------------------------------------------------------------------
-async def run_campaign_crawl_async(campaign_id: int, limit: Optional[int] = None) -> Dict[str, Any]:
+async def run_campaign_crawl_async(
+    campaign_id: int, limit: Optional[int] = None, finalize: bool = True
+) -> Dict[str, Any]:
     """
     Crawl all discovered websites for a campaign and create leads.
+
+    Args:
+        campaign_id: Campaign to crawl.
+        limit: Optional cap on the number of websites to crawl.
+        finalize: When True (default) the campaign is finalized to ``ready``
+            and progress completed. The research pipeline chains AI
+            qualification after crawling and passes False so it can finalize
+            once the whole run is done.
 
     Idempotent-ish: only rows with status ``discovered`` are processed, so
     re-runs pick up exactly the not-yet-processed websites. Failures on
@@ -64,7 +74,7 @@ async def run_campaign_crawl_async(campaign_id: int, limit: Optional[int] = None
     """
     async with AsyncSessionLocal() as db:
         try:
-            return await _run_crawl(db, campaign_id, limit)
+            return await _run_crawl(db, campaign_id, limit, finalize)
         except Exception as exc:
             logger.exception("Crawl phase failed for campaign %d", campaign_id)
             await db.rollback()
@@ -74,7 +84,9 @@ async def run_campaign_crawl_async(campaign_id: int, limit: Optional[int] = None
             raise
 
 
-async def _run_crawl(db: AsyncSession, campaign_id: int, limit: Optional[int]) -> Dict[str, Any]:
+async def _run_crawl(
+    db: AsyncSession, campaign_id: int, limit: Optional[int], finalize: bool
+) -> Dict[str, Any]:
     """Crawl every discovered research result and create leads."""
     campaign = (
         await db.execute(select(Campaign).where(Campaign.id == campaign_id))
@@ -105,7 +117,8 @@ async def _run_crawl(db: AsyncSession, campaign_id: int, limit: Optional[int]) -
 
     if not results:
         logger.info("Crawl phase for campaign %d: nothing discovered to crawl", campaign_id)
-        await _finalize(db, campaign_id)
+        if finalize:
+            await _finalize(db, campaign_id)
         return summary
 
     total = len(results)
@@ -172,7 +185,8 @@ async def _run_crawl(db: AsyncSession, campaign_id: int, limit: Optional[int]) -
         )
         await db.commit()
 
-    await _finalize(db, campaign_id)
+    if finalize:
+        await _finalize(db, campaign_id)
     logger.info("Crawl phase complete for campaign %d: %s", campaign_id, summary)
     return summary
 
@@ -186,6 +200,13 @@ async def _finalize(db: AsyncSession, campaign_id: int) -> None:
         campaign.status = "ready"
         await db.commit()
     progress_tracker.finish(campaign_id)
+
+
+async def finalize_campaign(campaign_id: int) -> None:
+    """Finalize a research run from a fresh session (used by the orchestrator
+    after the crawl + AI qualification phases)."""
+    async with AsyncSessionLocal() as db:
+        await _finalize(db, campaign_id)
 
 
 # -----------------------------------------------------------------------------

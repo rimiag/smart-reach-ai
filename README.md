@@ -13,7 +13,11 @@ A professional, scalable AI-powered B2B lead generation and outreach platform th
 | 1.4 | Search & discovery (multi-provider search agent, live progress tracking) | ✅ Complete |
 | 1.5 | Crawling & extraction (robots.txt-compliant crawler, contact extraction, lead creation) | ✅ Complete |
 | 1.6 | Export (CSV/Excel/JSON) & campaign statistics | ✅ Complete |
-| Phase 2+ | AI qualification, email generation, sending & approval, analytics | ⬜ Not started |
+| Phase 2 | AI qualification (score + reasoning) & personalized email generation | ✅ Complete |
+| Phase 3 | Email sending via SMTP with human approval, suppression list, limits | ✅ Complete |
+| Phase 4 | Reply detection (IMAP + AI classification), reply inbox, analytics | ✅ Complete |
+| Phase 5 | Follow-up sequences, AI sales assistant, lead intent detection | ✅ Complete |
+| Roadmap | CRM sync, Sheets, LinkedIn, WhatsApp/SMS, scheduling | ⬜ Optional |
 
 Details: [development_plan.md](development_plan.md), [PHASE1_COMPLETE.md](PHASE1_COMPLETE.md), per-iteration summaries ([1.4](ITERATION_1.4_COMPLETE.md), [1.5](ITERATION_1.5_COMPLETE.md), [1.6](ITERATION_1.6_COMPLETE.md)).
 
