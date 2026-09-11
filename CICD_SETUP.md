@@ -1,5 +1,9 @@
 # CI/CD Setup Guide — SmartReach AI
 
+> **For day-to-day staging operations, read [`STAGING_DEPLOYMENT.md`](STAGING_DEPLOYMENT.md)**
+> (configuration, DB schema policy, resets, troubleshooting). This file only
+> covers the one-time runner/GHCR bootstrap.
+
 One push to `main` = backend image build + frontend image build + automatic
 deploy to the staging VM (**192.168.1.30**). Nothing else — no PR checks, no
 dependency bots, no vulnerability scanners.

@@ -180,11 +180,16 @@ services:
     networks:
       - leadgen-network
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      # Real auth check: verifies the APP user can actually connect with the
+      # credentials configured here. ("mysqladmin ping" alone reports healthy
+      # even when authentication is broken - that once masked a credential
+      # drift between .staging.env and the initialized db volume, see
+      # STAGING_DEPLOYMENT.md "Access denied (1045)".)
+      test: ["CMD-SHELL", "mysql -u $${MYSQL_USER} -p$${MYSQL_PASSWORD} -e 'SELECT 1' $${MYSQL_DATABASE:-leadgen_db}"]
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 30s
+      start_period: 60s
     restart: unless-stopped
 
   redis:

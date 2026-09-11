@@ -44,10 +44,14 @@ try:
             else:
                 raise
 
-    # Check if tables exist
+    # Check if tables exist. Derive the expected list from the ORM metadata
+    # (not a hardcoded list) so newly added models are checked automatically.
+    import app.models  # noqa: F401 - these imports register all models on Base
+    from app.db.base import Base
+
     inspector = inspect(engine)
     existing_tables = inspector.get_table_names()
-    required_tables = ['users', 'campaigns', 'leads', 'research_results', 'emails', 'suppressions', 'replies']
+    required_tables = sorted(Base.metadata.tables.keys())
 
     missing_tables = [t for t in required_tables if t not in existing_tables]
 

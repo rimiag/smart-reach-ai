@@ -19,6 +19,10 @@ name: Build and Deploy
 on:
   push:
     branches: [main]
+  # Manual trigger (Actions tab -> Build and Deploy -> Run workflow) for ops
+  # moves that need a redeploy without a new commit, e.g. after changing the
+  # NEXT_PUBLIC_API_URL variable or a RESET_STAGING_DB db reset.
+  workflow_dispatch:
 
 concurrency:
   group: build-and-deploy
@@ -110,22 +114,25 @@ jobs:
       - name: Prepare .staging.env
         run: |
           if [ ! -f /opt/smart-reach-ai-staging/.staging.env ]; then
-            echo "::error::/opt/smart-reach-ai-staging/.staging.env is missing - create it from .staging.env.example (see CICD_SETUP.md)"
+            echo "::error::/opt/smart-reach-ai-staging/.staging.env is missing - create it from .staging.env.example (see STAGING_DEPLOYMENT.md)"
             exit 1
           fi
           cp /opt/smart-reach-ai-staging/.staging.env ./.staging.env
 
       # Maintenance lever for staging: set the repo variable RESET_STAGING_DB=yes
-      # (gh variable set RESET_STAGING_DB --body yes) and push to wipe the db
-      # volume so it re-initializes from the current .staging.env + init.sql.
-      # Deletes all staging data - keep it "no" otherwise. Reset to "no" after use.
+      # (gh variable set RESET_STAGING_DB --body yes) and push to main (or Run
+      # workflow from the Actions tab) to wipe the db volume so it re-initializes
+      # from the current .staging.env + init.sql. Deletes all staging data -
+      # keep it "no" otherwise. Reset to "no" after use. Full procedure:
+      # STAGING_DEPLOYMENT.md, section "One-time staging DB reset".
       - name: Reset staging db volume (only when RESET_STAGING_DB=yes)
         if: vars.RESET_STAGING_DB == 'yes'
         run: |
           echo "RESET_STAGING_DB=yes - wiping db volume, it will re-init from .staging.env"
           docker compose -f docker-compose.yml stop db || true
           docker compose -f docker-compose.yml rm -f db || true
-          docker volume rm smart-reach-ai-staging_mysql_data
+          # no-op error if the volume doesn't exist yet (first-ever deploy)
+          docker volume rm smart-reach-ai-staging_mysql_data || true
 
       - name: Log in to GHCR
         env:
