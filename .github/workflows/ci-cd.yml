@@ -115,6 +115,18 @@ jobs:
           fi
           cp /opt/smart-reach-ai-staging/.staging.env ./.staging.env
 
+      # Maintenance lever for staging: set the repo variable RESET_STAGING_DB=yes
+      # (gh variable set RESET_STAGING_DB --body yes) and push to wipe the db
+      # volume so it re-initializes from the current .staging.env + init.sql.
+      # Deletes all staging data - keep it "no" otherwise. Reset to "no" after use.
+      - name: Reset staging db volume (only when RESET_STAGING_DB=yes)
+        if: vars.RESET_STAGING_DB == 'yes'
+        run: |
+          echo "RESET_STAGING_DB=yes - wiping db volume, it will re-init from .staging.env"
+          docker compose -f docker-compose.yml stop db || true
+          docker compose -f docker-compose.yml rm -f db || true
+          docker volume rm smart-reach-ai-staging_mysql_data
+
       - name: Log in to GHCR
         env:
           GHCR_PAT: ${{ secrets.GHCR_PAT }}
