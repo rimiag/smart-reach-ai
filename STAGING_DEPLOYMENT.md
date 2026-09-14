@@ -432,5 +432,17 @@ The panel itself refuses self-deletion/self-demotion server-side.
 
 ---
 
+## 13. Manual schema scripts (fallback)
+
+`database/schema_full.sql` (full fresh-DB schema, auto-generated from the
+ORM models) and `database/incremental/*.sql` (guarded, re-runnable upgrades
+for existing DBs) are the manual fallback for when the entrypoint's
+automatic schema check cannot run. Usage, compatibility (MySQL 8.x and
+MariaDB 10.1+), and full-recovery steps: see `database/README.md`.
+Regenerate the full schema after model changes:
+`cd backend && python generate_schema_sql.py`.
+
+---
+
 *Companion docs: `CICD_SETUP.md` (runner + GHCR bootstrap), `LOCAL_DEVELOPMENT_GUIDE.md`,
 `MARIADB_10.1_COMPATIBILITY.md` (why 191-char index caps), `development_plan.md`.*
