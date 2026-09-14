@@ -52,5 +52,11 @@ class User(Base):
     # Status
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
+    # Billing (admin-managed, informational - no payment gateway)
+    # Plain String, not Enum: changing plans must not require an enum ALTER.
+    plan: Mapped[str] = mapped_column(String(50), default="free", nullable=False)
+    billing_status: Mapped[str] = mapped_column(String(50), default="active", nullable=False)
+    billing_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
     def __repr__(self) -> str:
         return f"<User(id={self.id}, email={self.email}, role={self.role})>"

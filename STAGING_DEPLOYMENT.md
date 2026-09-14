@@ -5,10 +5,13 @@ Runner/VM bootstrap details live in `CICD_SETUP.md`; this guide covers
 configuration, deployment, the database, and troubleshooting.
 
 **Status of this document:** written 2026-09-11, after diagnosing why deploys
-were failing (see next section). If staging is broken, start at
+were failing (next section). The reset procedure from section 5 was applied the
+same day and staging came up green. If staging breaks again, start at
 [Troubleshooting](#9-troubleshooting).
 
 ## 0. TL;DR — get staging green today
+
+**(Applied 2026-09-11 - staging is green. Kept for reference / next time.)**
 
 Staging deploys were failing with `Access denied for user 'leadgen_user'`
 because the MariaDB volume on the VM holds credentials from whenever it was
@@ -316,6 +319,101 @@ Staging is this exact stack; production differs only in degree, not in kind:
   rather than a new pipeline.
 - **Data**: the section-5 volume reset stops being an option; schema changes
   go through Alembic (section 6, third row) from the first production deploy.
+
+## 11. Everyday ops on the VM (start / stop / restart / logs)
+
+There is no permanent copy of the app files in `/opt` - only the secrets live
+there. `docker-compose.yml` sits in the GitHub runner's checkout, which is
+refreshed on every deploy:
+
+```
+/opt/smart-reach-ai-staging/.staging.env                 <- secrets (permanent)
+~/actions-runner/_work/smart-reach-ai/smart-reach-ai/    <- compose file + code (per-deploy checkout)
+```
+
+Find the checkout from the running stack itself (works even if the path
+differs):
+
+```bash
+docker compose ls          # shows the project + its config file path
+```
+
+Then `cd` into that directory - all `docker compose` commands below must run
+from there (or use `-p smart-reach-ai-staging`).
+
+```bash
+# ---- look ----
+docker compose ps                        # stack status + health
+docker compose logs -f backend           # follow logs (any service name:
+                                         #   frontend backend worker scheduler flower db redis)
+docker compose logs --tail 100 backend   # last 100 lines, no follow
+docker stats --no-stream                 # CPU/RAM per container
+
+# ---- restart ----
+docker compose restart backend           # one container (NOT others)
+docker compose restart                   # every container in place
+docker compose up -d                     # apply env/image changes: recreates
+                                         # containers whose config changed
+docker compose up -d --force-recreate backend   # rebuild one from scratch
+
+# ---- stop / start (containers removed vs kept) ----
+docker compose stop                      # stop everything, containers kept
+docker compose start                     # start them again
+docker compose down                      # stop + remove containers (volumes/data KEPT)
+docker compose up -d                     # ...bring the stack back (data intact)
+
+# ---- one container only, via plain docker (no compose file needed) ----
+docker restart smart-reach-ai-staging-backend-1
+docker logs -f smart-reach-ai-staging-backend-1
+```
+
+Gotchas:
+
+- **`restart` does NOT re-read `.staging.env`.** Environment is injected when a
+  container is CREATED. After editing `/opt/smart-reach-ai-staging/.staging.env`,
+  run `docker compose up -d` (recreates containers whose env changed), not
+  `restart`. (Also see section 4: env changes need no code push - just
+  Run workflow, or this manual `up -d`.)
+- **Do not edit files in the checkout dir** - the next deploy replaces the
+  whole directory. Permanent change = commit to the repo; permanent secret =
+  edit `/opt/smart-reach-ai-staging/.staging.env`.
+- **Data lives in named volumes** (`smart-reach-ai-staging_mysql_data`,
+  `_redis_data`, `_celerybeat-data`). `stop`, `restart`, `down`, `up` all keep
+  them. Only `down -v` or the `RESET_STAGING_DB` lever delete data - do not run
+  `down -v` casually.
+- **VM reboot**: Docker starts on boot and every service has
+  `restart: unless-stopped`, so the whole stack comes back by itself. If a
+  container is stuck in "Restarting", find the reason with
+  `docker logs --tail 50 smart-reach-ai-staging-<name>-1`.
+- If you stopped the stack with `docker compose stop` and want the health
+  checks to settle, give the backend ~60s (`start_period`) before judging.
+
+---
+
+## 12. Admin panel rollout (one-time, after the admin-panel deploy)
+
+The admin panel (Overview / Users / Billing / System at `/admin`) ships with
+three new `users` columns. Fresh databases get them automatically; the
+EXISTING staging db needs a one-time ALTER, and your account needs promoting:
+
+```bash
+# 1. After the deploy is green, SSH to the VM and add the columns:
+docker exec -it smart-reach-ai-staging-db-1 mysql -u root -p<MYSQL_ROOT_PASSWORD> leadgen_db -e "
+  ALTER TABLE users ADD COLUMN plan VARCHAR(50) NOT NULL DEFAULT 'free';
+  ALTER TABLE users ADD COLUMN billing_status VARCHAR(50) NOT NULL DEFAULT 'active';
+  ALTER TABLE users ADD COLUMN billing_notes TEXT NULL;
+  SHOW COLUMNS FROM users LIKE 'billing%';"
+
+# 2. Promote your account to admin (uses the email you registered with):
+cd ~/actions-runner/_work/smart-reach-ai/smart-reach-ai
+docker compose exec backend python promote_admin.py <your-email>
+
+# 3. Open http://192.168.1.30:3000 - the Admin item appears in the sidebar.
+```
+
+Other promote_admin.py uses: `--create --password <pw>` to create an admin
+from scratch, `--revoke` to demote (refuses to demote the last active admin).
+The panel itself refuses self-deletion/self-demotion server-side.
 
 ---
 

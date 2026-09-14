@@ -66,6 +66,10 @@ class UserResponse(UserBase):
     is_active: bool
     created_at: datetime
     last_login: Optional[datetime] = None
+    # Defaults keep token/auth flows working against a users table that has
+    # not received the 006 billing columns yet.
+    plan: str = "free"
+    billing_status: str = "active"
 
     model_config = {"from_attributes": True}
 

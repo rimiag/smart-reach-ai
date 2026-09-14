@@ -13,12 +13,74 @@ export interface User {
   is_active: boolean;
   created_at: string;
   last_login?: string;
+  plan?: string;
+  billing_status?: string;
 }
 
 export interface UserWithToken extends User {
   access_token: string;
   refresh_token: string;
   token_type: string;
+}
+
+// -----------------------------------------------------------------------------
+// Admin Types
+// -----------------------------------------------------------------------------
+export interface AdminUser {
+  id: number;
+  email: string;
+  name?: string;
+  role: 'admin' | 'user';
+  is_active: boolean;
+  created_at: string;
+  last_login?: string;
+  plan: string;
+  billing_status: string;
+  billing_notes?: string;
+  campaigns_count: number;
+  leads_count: number;
+  emails_count: number;
+}
+
+export interface AdminUsersResponse {
+  items: AdminUser[];
+  total: number;
+  page: number;
+  per_page: number;
+}
+
+export interface DayCount {
+  date: string;
+  count: number;
+}
+
+export interface RecentSignup {
+  id: number;
+  email: string;
+  name?: string;
+  role: 'admin' | 'user';
+  created_at: string;
+}
+
+export interface OverviewStats {
+  users_total: number;
+  users_active: number;
+  users_admins: number;
+  campaigns_total: number;
+  leads_total: number;
+  emails_total: number;
+  replies_total: number;
+  suppressions_total: number;
+  emails_last_7_days: DayCount[];
+  recent_signups: RecentSignup[];
+}
+
+export interface SystemStatus {
+  database: boolean;
+  redis: boolean;
+  celery_online: boolean;
+  celery_workers: string[];
+  integrations: Record<string, boolean>;
 }
 
 // -----------------------------------------------------------------------------

@@ -79,12 +79,27 @@ const NAV_ITEMS = [
       />
     ),
   },
+  {
+    label: 'Admin',
+    href: '/admin',
+    adminOnly: true,
+    icon: (
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+      />
+    ),
+  },
 ];
 
 export default function AppShell({ title, description, action, children, width = 'default' }: AppShellProps) {
   const pathname = usePathname();
-  const { user, logout } = useAuth();
+  const { user, logout, isAdmin } = useAuth();
   const [unreadReplies, setUnreadReplies] = useState(0);
+
+  const navItems = NAV_ITEMS.filter((item) => !('adminOnly' in item && item.adminOnly) || isAdmin);
 
   useEffect(() => {
     let cancelled = false;
@@ -111,7 +126,7 @@ export default function AppShell({ title, description, action, children, width =
         </div>
 
         <nav className="flex-1 space-y-1 px-3 py-4">
-          {NAV_ITEMS.map((item) => {
+          {navItems.map((item) => {
             const active =
               pathname === item.href || pathname.startsWith(item.href + '/');
             return (

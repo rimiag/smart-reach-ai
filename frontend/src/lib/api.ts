@@ -184,6 +184,28 @@ export const api = {
   getDashboardStats: () => apiClient.get('/analytics/dashboard'),
   getCampaignAnalytics: () => apiClient.get('/analytics/campaigns'),
   getReplyAnalytics: () => apiClient.get('/analytics/replies'),
+
+  // Admin (role: admin required - backend enforces, UI hides)
+  getAdminOverview: () => apiClient.get('/admin/overview'),
+  getAdminUsers: (params?: Record<string, unknown>) =>
+    apiClient.get('/admin/users', { params }),
+  createAdminUser: (
+    data: { email: string; name?: string; password: string; role?: 'admin' | 'user' }
+  ) => apiClient.post('/admin/users', data),
+  updateAdminUser: (
+    id: number,
+    data: Partial<{
+      name: string;
+      role: 'admin' | 'user';
+      is_active: boolean;
+      password: string;
+      plan: string;
+      billing_status: string;
+      billing_notes: string;
+    }>
+  ) => apiClient.patch(`/admin/users/${id}`, data),
+  deleteAdminUser: (id: number) => apiClient.delete(`/admin/users/${id}`),
+  getAdminSystem: () => apiClient.get('/admin/system'),
 };
 
 export default apiClient;
