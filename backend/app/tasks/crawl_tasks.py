@@ -192,12 +192,24 @@ async def _run_crawl(
 
 
 async def _finalize(db: AsyncSession, campaign_id: int) -> None:
-    """Move a researching campaign to ready and mark progress complete."""
+    """
+    Complete a research run and mark progress finished.
+
+    First runs move the campaign to 'ready'. Research-again runs restore the
+    status the campaign had before (stored in settings by the endpoint), so
+    an active campaign stays active after topping up its leads.
+    """
     campaign = (
         await db.execute(select(Campaign).where(Campaign.id == campaign_id))
     ).scalar_one_or_none()
     if campaign is not None and campaign.status in ("researching", "ready"):
-        campaign.status = "ready"
+        settings_map = dict(campaign.settings or {})
+        previous = settings_map.pop("pre_research_status", None)
+        if previous:
+            campaign.settings = settings_map
+            campaign.status = previous
+        else:
+            campaign.status = "ready"
         await db.commit()
     progress_tracker.finish(campaign_id)
 

@@ -21,6 +21,7 @@ export default function CampaignDetailPage() {
   const [aiMessage, setAiMessage] = useState('');
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [locationsInput, setLocationsInput] = useState('');
+  const [researchMode, setResearchMode] = useState<'start' | 'again'>('start');
 
   const stageIndex =
     {
@@ -73,11 +74,12 @@ export default function CampaignDetailPage() {
     }
   }, [params.id, fetchCampaign, fetchLeadsCount]);
 
-  const handleStartResearch = () => {
+  const handleStartResearch = (mode: 'start' | 'again') => {
     if (!campaign) return;
     // Prefill with any locations saved on the campaign
     const saved = ((campaign.settings || {}) as Record<string, unknown>).locations;
     setLocationsInput(Array.isArray(saved) ? saved.join(', ') : '');
+    setResearchMode(mode);
     setError('');
     setShowLocationModal(true);
   };
@@ -93,14 +95,22 @@ export default function CampaignDetailPage() {
     setIsStartingResearch(true);
     setError('');
     try {
-      await api.startResearch(campaign.id, locations.length ? { locations } : undefined);
+      if (researchMode === 'again') {
+        await api.researchAgain(campaign.id, locations.length ? { locations } : undefined);
+      } else {
+        await api.startResearch(campaign.id, locations.length ? { locations } : undefined);
+      }
       setShowLocationModal(false);
       setCampaign({ ...campaign, status: 'researching', started_at: new Date().toISOString() });
       setResearchActive(true);
       setAiMessage(
-        locations.length
-          ? `Research started - targeting: ${locations.join(', ')}`
-          : 'Research started'
+        researchMode === 'again'
+          ? `Research again started - searching deeper for new websites${
+              locations.length ? ` (targeting: ${locations.join(', ')})` : ''
+            }`
+          : locations.length
+            ? `Research started - targeting: ${locations.join(', ')}`
+            : 'Research started'
       );
     } catch (err: unknown) {
       const axiosError = err as { response?: { data?: { error?: { message?: string } } } };
@@ -359,13 +369,32 @@ export default function CampaignDetailPage() {
                     Edit Campaign
                   </Link>
                   <button
-                    onClick={handleStartResearch}
+                    onClick={() => handleStartResearch('start')}
                     disabled={isStartingResearch}
                     className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-6 py-2 rounded-md transition-colors"
                   >
                     {isStartingResearch ? 'Starting...' : 'Start Research'}
                   </button>
                 </>
+              )}
+
+              {/* Research Again: re-run research to discover more websites/leads */}
+              {campaign.status !== 'draft' && campaign.status !== 'researching' && (
+                <button
+                  onClick={() => handleStartResearch('again')}
+                  disabled={isStartingResearch}
+                  className="border-2 border-blue-600 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 disabled:opacity-50 px-6 py-2 rounded-md transition-colors flex items-center gap-2"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                    />
+                  </svg>
+                  Research Again
+                </button>
               )}
             </div>
           </div>
@@ -412,10 +441,12 @@ export default function CampaignDetailPage() {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
             <div className="w-full max-w-md rounded-lg bg-white dark:bg-gray-800 shadow-xl p-6">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
-                Target locations
+                {researchMode === 'again' ? 'Research again' : 'Target locations'}
               </h3>
               <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                Where should we search for leads? Leave empty for worldwide results.
+                {researchMode === 'again'
+                  ? "We'll skip the websites already found, search deeper for new ones, and create leads from them. Existing leads are untouched."
+                  : 'Where should we search for leads? Leave empty for worldwide results.'}
               </p>
               <input
                 value={locationsInput}
@@ -448,6 +479,12 @@ export default function CampaignDetailPage() {
                   )
                 )}
               </div>
+              {researchMode === 'again' && (
+                <p className="text-xs text-gray-400 dark:text-gray-500 mb-4">
+                  Each run spends one search-provider request per keyword ({campaign.keywords?.length || 0}{' '}
+                  keywords ≈ {campaign.keywords?.length || 0} searches).
+                </p>
+              )}
               <div className="flex justify-end gap-3 mt-4">
                 <button
                   onClick={() => setShowLocationModal(false)}
@@ -460,7 +497,7 @@ export default function CampaignDetailPage() {
                   disabled={isStartingResearch}
                   className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white px-5 py-2 rounded-md text-sm font-medium"
                 >
-                  {isStartingResearch ? 'Starting...' : 'Start Research'}
+                  {isStartingResearch ? 'Starting...' : researchMode === 'again' ? 'Research Again' : 'Start Research'}
                 </button>
               </div>
             </div>

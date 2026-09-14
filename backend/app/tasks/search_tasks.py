@@ -23,7 +23,7 @@ import asyncio
 import logging
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.search_agent import SearchAgent
@@ -44,7 +44,9 @@ logger = logging.getLogger(__name__)
 # Core orchestration (async)
 # -----------------------------------------------------------------------------
 async def run_campaign_search_async(
-    campaign_id: int, locations: Optional[List[str]] = None
+    campaign_id: int,
+    locations: Optional[List[str]] = None,
+    deeper: bool = False,
 ) -> Dict[str, Any]:
     """
     Run the research phases for a campaign: search every keyword (optionally
@@ -55,6 +57,9 @@ async def run_campaign_search_async(
         campaign_id: Campaign to research.
         locations: Optional free-text locations (e.g. ["United States"]) to
             geo-target the searches; None searches globally.
+        deeper: Research-again mode - skip past the results the campaign
+            already has by starting each keyword search one page deeper,
+            so re-runs discover NEW websites instead of the same top hits.
 
     Idempotent: re-runs skip domains already stored for the campaign.
 
@@ -65,7 +70,7 @@ async def run_campaign_search_async(
     """
     async with AsyncSessionLocal() as db:
         try:
-            summary = await _run_search(db, campaign_id, locations)
+            summary = await _run_search(db, campaign_id, locations, deeper=deeper)
         except Exception as exc:
             # Leave the system in a retryable state: report the failure and
             # put the campaign back to draft so the user can start again.
@@ -100,7 +105,10 @@ async def run_campaign_search_async(
 
 
 async def _run_search(
-    db: AsyncSession, campaign_id: int, locations: Optional[List[str]] = None
+    db: AsyncSession,
+    campaign_id: int,
+    locations: Optional[List[str]] = None,
+    deeper: bool = False,
 ) -> Dict[str, Any]:
     """Search every campaign keyword (per location) and save the results."""
     result = await db.execute(select(Campaign).where(Campaign.id == campaign_id))
@@ -147,6 +155,18 @@ async def _run_search(
     ]
     total_steps = len(search_targets)
 
+    # Research-again mode: skip past the results earlier runs already stored
+    # per keyword, so each search fetches the next, unseen page of results.
+    deeper_offsets: Dict[str, int] = {}
+    if deeper:
+        rows = await db.execute(
+            select(ResearchResult.keyword, func.count())
+            .where(ResearchResult.campaign_id == campaign_id)
+            .group_by(ResearchResult.keyword)
+        )
+        deeper_offsets = {keyword: int(n) for keyword, n in rows.all()}
+        summary["research_again"] = True
+
     for idx, (keyword, location) in enumerate(search_targets):
         step_label = f"Searching: {keyword}" + (f" ({location})" if location else "")
         progress_tracker.set_step(
@@ -155,8 +175,9 @@ async def _run_search(
             progress_percentage=(idx / total_steps) * 100,
         )
 
+        start_offset = deeper_offsets.get(keyword, 0)
         try:
-            results = await agent.search(keyword, location=location or None)
+            results = await agent.search(keyword, location=location or None, start=start_offset)
         except SearchProviderError as exc:
             # One bad keyword must not sink the whole run.
             logger.error("Search failed for keyword %r: %s", keyword, exc)
@@ -170,6 +191,7 @@ async def _run_search(
             results,
             provider_name=agent.provider.name,
             location=location,
+            start=start_offset,
         )
 
         summary["keywords_succeeded"] += 1
@@ -214,12 +236,14 @@ async def _save_research_results(
     results: List[SearchResult],
     provider_name: str,
     location: Optional[str] = None,
+    start: int = 0,
 ) -> tuple[int, int]:
     """
     Persist search results as ResearchResult rows.
 
     Skips domains already discovered for this campaign (across keywords and
-    across re-runs).
+    across re-runs). ``start`` is the 0-based offset this page was fetched
+    from, so stored positions stay meaningful across re-research runs.
 
     Returns:
         Tuple of (saved_count, skipped_count).
@@ -255,7 +279,9 @@ async def _save_research_results(
                 snippet=search_result.snippet,
                 status="discovered",
                 provider=provider_name,
-                result_position=search_result.position or None,
+                result_position=(
+                    (start + search_result.position) if search_result.position else None
+                ),
                 extra_data=extra,
             )
         )
@@ -267,12 +293,25 @@ async def _save_research_results(
 
 
 async def _reset_campaign_status(db: AsyncSession, campaign_id: int) -> None:
-    """Put a researching campaign back to draft so it can be started again."""
+    """
+    Put a researching campaign back to a startable state after a failed run.
+
+    Research-again runs restore the status the campaign had before (stored
+    in settings by the research-again endpoint); first runs go back to draft.
+    """
     result = await db.execute(select(Campaign).where(Campaign.id == campaign_id))
     campaign = result.scalar_one_or_none()
-    if campaign is not None and campaign.status == "researching":
+    if campaign is None or campaign.status != "researching":
+        return
+
+    settings_map = dict(campaign.settings or {})
+    previous = settings_map.pop("pre_research_status", None)
+    if previous:
+        campaign.settings = settings_map
+        campaign.status = previous
+    else:
         campaign.status = "draft"
-        await db.commit()
+    await db.commit()
 
 
 # -----------------------------------------------------------------------------
@@ -281,16 +320,20 @@ async def _reset_campaign_status(db: AsyncSession, campaign_id: int) -> None:
 @celery_app.task(
     name="app.tasks.search_tasks.run_campaign_search", time_limit=7200, soft_time_limit=7100
 )
-def run_campaign_search(campaign_id: int) -> Dict[str, Any]:
+def run_campaign_search(campaign_id: int, deeper: bool = False) -> Dict[str, Any]:
     """
     Celery task: run search + crawl phases for a campaign.
 
     Long time limits: a polite crawl of a few hundred websites takes well
     over the default 5-minute Celery limit.
 
+    ``deeper=True`` is the research-again mode: each keyword search starts
+    one page past the results the campaign already has.
+
     Failures are reported through the progress tracker (visible in the UI)
-    and the campaign is reset to draft; the task itself is not retried since
-    a re-run is triggered from the UI after the underlying cause is fixed.
+    and the campaign is reset to a startable state; the task itself is not
+    retried since a re-run is triggered from the UI after the underlying
+    cause is fixed.
     """
-    logger.info("Celery: running search phase for campaign %d", campaign_id)
-    return asyncio.run(run_campaign_search_async(campaign_id))
+    logger.info("Celery: running search phase for campaign %d (deeper=%s)", campaign_id, deeper)
+    return asyncio.run(run_campaign_search_async(campaign_id, deeper=deeper))

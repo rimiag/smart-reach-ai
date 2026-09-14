@@ -36,10 +36,18 @@ class SerpAPISearchProvider(SearchProvider):
         return bool(self.api_key)
 
     async def search(
-        self, keyword: str, limit: int, location: Optional[str] = None
+        self,
+        keyword: str,
+        limit: int,
+        location: Optional[str] = None,
+        start: int = 0,
     ) -> List[SearchResult]:
         """
         Search SerpAPI for ``keyword``.
+
+        ``start`` is the 0-based result offset (SerpAPI's native pagination)
+        - used by "research again" to fetch pages beyond what a campaign
+        already has.
         """
         if not self.is_configured:
             raise SearchProviderError("serpapi: SERPAPI_KEY is not configured")
@@ -50,6 +58,8 @@ class SerpAPISearchProvider(SearchProvider):
             "api_key": self.api_key,
             "num": max(10, min(limit, 100)),
         }
+        if start:
+            params["start"] = max(0, start)
         # Location targeting: SerpAPI accepts a free-text location name
         if location:
             params["location"] = location

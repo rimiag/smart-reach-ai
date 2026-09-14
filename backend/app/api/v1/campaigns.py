@@ -27,9 +27,9 @@ from app.schemas.campaign import (
     CampaignStats,
     CampaignUpdate,
     ResearchProgress,
+    StartResearchRequest,
 )
 from app.schemas.common import MessageResponse, PaginatedResponse
-from app.schemas.campaign import StartResearchRequest
 from app.schemas.email import SendRequest
 from app.schemas.user import UserResponse
 from app.services.analytics_service import analytics_service
@@ -215,6 +215,82 @@ async def delete_campaign(
     await campaign_service.delete_campaign(db, campaign)
 
 
+async def _launch_research(
+    db: AsyncSession,
+    campaign: Campaign,
+    locations: list,
+    deeper: bool = False,
+) -> ResearchProgress:
+    """
+    Shared launcher for start-research and research-again: persist optional
+    geo-targeting, remember the prior status (research-again), flip the
+    campaign to 'researching' and dispatch the pipeline to Celery (or run
+    in-process when no broker is available).
+    """
+    # Fail fast with a clear message when no search provider is configured,
+    # instead of letting the background run discover it.
+    try:
+        SearchAgent()
+    except SearchProviderError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+
+    settings_map = dict(campaign.settings or {})
+
+    # Persist geo-targeting so it's visible/reusable (campaign.settings JSON)
+    if locations:
+        settings_map["locations"] = locations
+
+    # Research-again: remember where to return the campaign to when the run
+    # finishes (finalize) or fails (reset) - an active campaign must stay
+    # active, not drop back to 'ready'/'draft'.
+    if deeper:
+        settings_map["pre_research_status"] = campaign.status
+    campaign.settings = settings_map
+
+    updated_campaign = await campaign_service.update_status(db, campaign, "researching")
+
+    # Preferred path: Celery worker on the "search" queue. Fallback: run the
+    # same async orchestration in this process (laptop dev without Redis).
+    dispatched_via_celery = False
+    try:
+        # retry=False: fail fast without a broker (local dev) so the
+        # in-process fallback starts immediately.
+        run_campaign_search.apply_async(args=[updated_campaign.id, locations, deeper], retry=False)
+        dispatched_via_celery = True
+    except Exception as exc:
+        logger.warning(
+            "Celery broker unavailable (%s); running campaign %d research in-process",
+            exc,
+            campaign.id,
+        )
+
+    if not dispatched_via_celery:
+        research_task = asyncio.create_task(
+            run_campaign_search_async(updated_campaign.id, locations, deeper=deeper)
+        )
+        _background_research_tasks.add(research_task)
+        research_task.add_done_callback(_background_research_tasks.discard)
+
+    progress_tracker.initialize(
+        updated_campaign.id,
+        keywords_total=len(updated_campaign.keywords or []),
+        current_step="Queued",
+    )
+
+    return ResearchProgress(
+        campaign_id=updated_campaign.id,
+        status="researching",
+        current_step="Queued",
+        progress_percentage=0.0,
+        keywords_total=len(updated_campaign.keywords or []),
+        keywords_completed=0,
+        started_at=updated_campaign.started_at,
+    )
+
+
 @router.post("/{campaign_id}/start", response_model=ResearchProgress)
 async def start_research(
     campaign_id: int,
@@ -258,63 +334,55 @@ async def start_research(
             detail=f"Cannot start campaign in '{campaign.status}' status",
         )
 
-    # Fail fast with a clear message when no search provider is configured,
-    # instead of letting the background run discover it.
-    try:
-        SearchAgent()
-    except SearchProviderError as exc:
+    return await _launch_research(db, campaign, locations, deeper=False)
+
+
+@router.post("/{campaign_id}/research-again", response_model=ResearchProgress)
+async def research_again(
+    campaign_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[UserResponse, Depends(get_current_user)],
+    payload: Optional[StartResearchRequest] = None,
+):
+    """
+    Re-run research on a campaign that already has results ("Research Again").
+
+    Searches continue one page deeper per keyword, skipping the websites the
+    campaign already has, then crawl only the NEW discoveries and create
+    leads from them. Existing research results and leads are untouched.
+
+    The campaign keeps its status across the run: finalize restores whatever
+    it was before (active stays active, ready stays ready, ...).
+    """
+    locations = [loc.strip() for loc in (payload.locations or []) if loc.strip()] if payload else []
+
+    campaign = await campaign_service.get_campaign(db, campaign_id)
+
+    if not campaign:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Campaign not found",
+        )
+
+    # Verify ownership
+    if campaign.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to run research on this campaign",
+        )
+
+    if campaign.status == "researching":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
+            detail="Research is already in progress for this campaign",
+        )
+    if campaign.status == "draft":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This campaign has not been researched yet - use Start Research",
         )
 
-    # Persist geo-targeting so it's visible/reusable (campaign.settings JSON)
-    if locations:
-        settings_map = dict(campaign.settings or {})
-        settings_map["locations"] = locations
-        campaign.settings = settings_map
-
-    updated_campaign = await campaign_service.update_status(db, campaign, "researching")
-
-    # Preferred path: Celery worker on the "search" queue. Fallback: run the
-    # same async orchestration in this process (laptop dev without Redis).
-    dispatched_via_celery = False
-    try:
-        # retry=False: fail fast without a broker (local dev) so the
-        # in-process fallback starts immediately.
-        run_campaign_search.apply_async(
-            args=[updated_campaign.id, locations], retry=False
-        )
-        dispatched_via_celery = True
-    except Exception as exc:
-        logger.warning(
-            "Celery broker unavailable (%s); running campaign %d research in-process",
-            exc,
-            campaign_id,
-        )
-
-    if not dispatched_via_celery:
-        research_task = asyncio.create_task(
-            run_campaign_search_async(updated_campaign.id, locations)
-        )
-        _background_research_tasks.add(research_task)
-        research_task.add_done_callback(_background_research_tasks.discard)
-
-    progress_tracker.initialize(
-        updated_campaign.id,
-        keywords_total=len(updated_campaign.keywords or []),
-        current_step="Queued",
-    )
-
-    return ResearchProgress(
-        campaign_id=updated_campaign.id,
-        status="researching",
-        current_step="Queued",
-        progress_percentage=0.0,
-        keywords_total=len(updated_campaign.keywords or []),
-        keywords_completed=0,
-        started_at=updated_campaign.started_at,
-    )
+    return await _launch_research(db, campaign, locations, deeper=True)
 
 
 @router.get("/{campaign_id}/progress", response_model=ResearchProgress)

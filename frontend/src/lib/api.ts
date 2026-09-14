@@ -113,6 +113,8 @@ export const api = {
   deleteCampaign: (id: number) => apiClient.delete(`/campaigns/${id}`),
   startResearch: (id: number, data?: { locations?: string[] }) =>
     apiClient.post(`/campaigns/${id}/start`, data || {}),
+  researchAgain: (id: number, data?: { locations?: string[] }) =>
+    apiClient.post(`/campaigns/${id}/research-again`, data || {}),
   getResearchProgress: (id: number) => apiClient.get(`/campaigns/${id}/progress`),
   getCampaignStats: (id: number) => apiClient.get(`/campaigns/${id}/stats`),
   qualifyCampaign: (id: number) => apiClient.post(`/campaigns/${id}/qualify`),

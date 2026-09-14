@@ -44,10 +44,17 @@ class GoogleSearchProvider(SearchProvider):
         return bool(self.api_key and self.engine_id)
 
     async def search(
-        self, keyword: str, limit: int, location: Optional[str] = None
+        self,
+        keyword: str,
+        limit: int,
+        location: Optional[str] = None,
+        start: int = 0,
     ) -> List[SearchResult]:
         """
         Search Google for ``keyword``, paginating 10 results at a time.
+
+        ``start`` is a 0-based offset (deeper-page requests) - the internal
+        pagination continues from there using Google's 1-based indexing.
         """
         if not self.is_configured:
             raise SearchProviderError(
@@ -55,15 +62,15 @@ class GoogleSearchProvider(SearchProvider):
             )
 
         results: List[SearchResult] = []
-        start = 1
+        page_start = start + 1
 
-        while len(results) < limit and start <= self.MAX_START_INDEX:
+        while len(results) < limit and page_start <= self.MAX_START_INDEX:
             params: Dict[str, Any] = {
                 "key": self.api_key,
                 "cx": self.engine_id,
                 "q": keyword,
                 "num": min(self.MAX_PER_REQUEST, limit - len(results)),
-                "start": start,
+                "start": page_start,
             }
             # Location targeting: gl biases the country, cr restricts to it
             code = country_code(location) if location else None
@@ -87,7 +94,7 @@ class GoogleSearchProvider(SearchProvider):
                     )
                 )
 
-            start += self.MAX_PER_REQUEST
+            page_start += self.MAX_PER_REQUEST
             # Be polite to the API between pages of the same keyword.
             await asyncio.sleep(0.2)
 

@@ -442,6 +442,9 @@ MariaDB 10.1+), and full-recovery steps: see `database/README.md`.
 Regenerate the full schema after model changes:
 `cd backend && python generate_schema_sql.py`.
 
+Note: the "Research Again" campaign feature ships as pure code - no schema
+change, nothing to run by hand; it is picked up by the next deploy.
+
 ---
 
 *Companion docs: `CICD_SETUP.md` (runner + GHCR bootstrap), `LOCAL_DEVELOPMENT_GUIDE.md`,

@@ -132,10 +132,21 @@ class SearchProvider(ABC):
 
     @abstractmethod
     async def search(
-        self, keyword: str, limit: int, location: Optional[str] = None
+        self,
+        keyword: str,
+        limit: int,
+        location: Optional[str] = None,
+        start: int = 0,
     ) -> List[SearchResult]:
         """
         Search the web for ``keyword`` and return up to ``limit`` results.
+
+        Args:
+            keyword: The search term.
+            limit: Maximum results to return.
+            location: Optional free-text location to geo-target results.
+            start: 0-based result offset for deeper pages (0 = first page).
+                Providers that don't support offsets may ignore it.
 
         Raises:
             SearchProviderError: On misconfiguration or after exhausting retries.

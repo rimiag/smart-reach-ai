@@ -39,13 +39,18 @@ class BingSearchProvider(SearchProvider):
         return bool(self.api_key)
 
     async def search(
-        self, keyword: str, limit: int, location: Optional[str] = None
+        self,
+        keyword: str,
+        limit: int,
+        location: Optional[str] = None,
+        start: int = 0,
     ) -> List[SearchResult]:
         """
         Search Bing for ``keyword``.
 
         Bing returns up to 50 web results per request, which covers the
-        per-keyword limits used by campaigns.
+        per-keyword limits used by campaigns. ``start`` (deeper-page offset)
+        is accepted for interface compatibility but ignored.
         """
         if not self.is_configured:
             raise SearchProviderError("bing: BING_SEARCH_API_KEY is not configured")

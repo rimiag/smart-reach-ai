@@ -138,6 +138,7 @@ class SearchAgent:
         keyword: str,
         limit: Optional[int] = None,
         location: Optional[str] = None,
+        start: int = 0,
     ) -> List[SearchResult]:
         """
         Search for websites relevant to the keyword.
@@ -147,6 +148,9 @@ class SearchAgent:
             limit: Maximum results; defaults to settings.search_results_per_keyword.
             location: Optional free-text location (e.g. "United States") - passed
                 to the provider to geo-target results where supported.
+            start: 0-based result offset for deeper pages (used by
+                "research again" to fetch results beyond what the campaign
+                already has); ignored by providers without offset support.
 
         Returns:
             Validated search results, deduplicated by domain, ordered by position.
@@ -156,7 +160,7 @@ class SearchAgent:
         """
         limit = limit or settings.search_results_per_keyword
 
-        raw_results = await self.provider.search(keyword, limit, location=location)
+        raw_results = await self.provider.search(keyword, limit, location=location, start=start)
         logger.info(
             "Keyword %r: %d raw results from %s",
             keyword,
