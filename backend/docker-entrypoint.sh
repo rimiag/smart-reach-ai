@@ -72,8 +72,9 @@ try:
         print('All required tables exist.')
 
     # Ensure columns on existing tables (create_all never ALTERs): additive
-    # model changes are applied at startup so a deploy can't 500 with
-    # "Unknown column" like the users.plan staging incident.
+    # model changes are applied at startup so a deploy cannot 500 with an
+    # unknown-column error like the users.plan staging incident.
+    # NOTE: no double quotes allowed in this python -c block - bash eats them.
     import app.db.ensure_schema as ensure_schema
     ensure_schema.ensure_columns(engine)
 

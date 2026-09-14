@@ -24,6 +24,7 @@ container.
 
 import logging
 import os
+from typing import Optional
 
 from sqlalchemy import create_engine, inspect
 from sqlalchemy.engine import Engine
@@ -42,7 +43,7 @@ def _sync_engine() -> Engine:
     return create_engine(db_url)
 
 
-def ensure_columns(engine: Engine | None = None) -> int:
+def ensure_columns(engine: Optional[Engine] = None) -> int:
     """
     Add ORM columns missing from existing tables. Returns the number added.
 
