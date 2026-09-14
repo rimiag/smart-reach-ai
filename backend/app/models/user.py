@@ -54,8 +54,14 @@ class User(Base):
 
     # Billing (admin-managed, informational - no payment gateway)
     # Plain String, not Enum: changing plans must not require an enum ALTER.
-    plan: Mapped[str] = mapped_column(String(50), default="free", nullable=False)
-    billing_status: Mapped[str] = mapped_column(String(50), default="active", nullable=False)
+    # server_default (not just python default) so ensure_schema's ALTER can
+    # backfill existing rows when adding the column to a populated table.
+    plan: Mapped[str] = mapped_column(
+        String(50), default="free", server_default="free", nullable=False
+    )
+    billing_status: Mapped[str] = mapped_column(
+        String(50), default="active", server_default="active", nullable=False
+    )
     billing_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     def __repr__(self) -> str:

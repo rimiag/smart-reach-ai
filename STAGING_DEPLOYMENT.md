@@ -393,22 +393,37 @@ Gotchas:
 ## 12. Admin panel rollout (one-time, after the admin-panel deploy)
 
 The admin panel (Overview / Users / Billing / System at `/admin`) ships with
-three new `users` columns. Fresh databases get them automatically; the
-EXISTING staging db needs a one-time ALTER, and your account needs promoting:
+three new `users` columns. Your account also needs promoting:
 
 ```bash
-# 1. After the deploy is green, SSH to the VM and add the columns:
-docker exec -it smart-reach-ai-staging-db-1 mysql -u root -p<MYSQL_ROOT_PASSWORD> leadgen_db -e "
-  ALTER TABLE users ADD COLUMN plan VARCHAR(50) NOT NULL DEFAULT 'free';
-  ALTER TABLE users ADD COLUMN billing_status VARCHAR(50) NOT NULL DEFAULT 'active';
-  ALTER TABLE users ADD COLUMN billing_notes TEXT NULL;
-  SHOW COLUMNS FROM users LIKE 'billing%';"
-
-# 2. Promote your account to admin (uses the email you registered with):
+# 1. Promote your account to admin (uses the email you registered with):
 cd ~/actions-runner/_work/smart-reach-ai/smart-reach-ai
 docker compose exec backend python promote_admin.py <your-email>
 
-# 3. Open http://192.168.1.30:3000 - the Admin item appears in the sidebar.
+# 2. Open http://192.168.1.30:3000 - the Admin item appears in the sidebar.
+```
+
+### New columns are applied automatically at startup
+
+Since the ensure-schema change, the backend entrypoint compares the ORM
+models against the live database on every boot and runs
+`ALTER TABLE ... ADD COLUMN` for anything missing (works on MariaDB, MySQL,
+PostgreSQL - the statement is compiled by SQLAlchemy for the running
+engine). This is what the users.plan rollout needed by hand; deploys after
+this change can no longer fail with "Unknown column" after a model change.
+
+Manual ALTER is still the fallback - if an ADD COLUMN fails (e.g. NOT NULL
+without a default on a populated table), the entrypoint logs the exact
+statement to run under `SCHEMA: could not add missing column` in
+`docker compose logs backend`. Known limitation: indexes on NEW columns are
+not auto-created; add those by hand.
+
+For reference, the columns the admin panel added:
+
+```sql
+ALTER TABLE users ADD COLUMN plan VARCHAR(50) NOT NULL DEFAULT 'free';
+ALTER TABLE users ADD COLUMN billing_status VARCHAR(50) NOT NULL DEFAULT 'active';
+ALTER TABLE users ADD COLUMN billing_notes TEXT NULL;
 ```
 
 Other promote_admin.py uses: `--create --password <pw>` to create an admin

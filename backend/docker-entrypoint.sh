@@ -71,6 +71,12 @@ try:
     else:
         print('All required tables exist.')
 
+    # Ensure columns on existing tables (create_all never ALTERs): additive
+    # model changes are applied at startup so a deploy can't 500 with
+    # "Unknown column" like the users.plan staging incident.
+    import app.db.ensure_schema as ensure_schema
+    ensure_schema.ensure_columns(engine)
+
 except Exception as e:
     print(f'Error: {e}')
     import traceback
