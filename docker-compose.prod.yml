@@ -33,9 +33,9 @@ x-backend-env: &backend-env
   ENV_FILE: docker
   ENVIRONMENT: production
   DATABASE_URL: mysql+aiomysql://${DB_USER:-leadgen_user}:${DB_PASSWORD:-leadgen_pass}@db:3306/${DB_NAME:-leadgen_db}
-  REDIS_URL: redis://redis:6379/0
-  CELERY_BROKER_URL: redis://redis:6379/0
-  CELERY_RESULT_BACKEND: redis://redis:6379/0
+  REDIS_URL: redis://redis:6381/0
+  CELERY_BROKER_URL: redis://redis:6381/0
+  CELERY_RESULT_BACKEND: redis://redis:6381/0
   LOG_LEVEL: INFO
   LOG_FORMAT: json
   API_URL: ${API_URL:-https://api.medidatalab.com}
@@ -139,8 +139,8 @@ services:
       - "127.0.0.1:5555:5555"
     environment:
       ENVIRONMENT: production
-      REDIS_URL: redis://redis:6379/0
-      CELERY_BROKER_URL: redis://redis:6379/0
+      REDIS_URL: redis://redis:6381/0
+      CELERY_BROKER_URL: redis://redis:6381/0
     depends_on:
       - redis
       - worker
@@ -190,12 +190,15 @@ services:
   redis:
     image: redis:7-alpine
     # NO ports: - redis is reachable only from inside leadgen-network.
+    # Non-default port 6381 (matching every REDIS_URL/CELERY_* URL in this
+    # file) so it can never collide with a host redis on 6379.
+    command: ["redis-server", "--port", "6381"]
     volumes:
       - redis_data:/data
     networks:
       - leadgen-network
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-p", "6381", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5

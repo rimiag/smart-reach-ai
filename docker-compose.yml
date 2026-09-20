@@ -26,9 +26,9 @@ x-backend-env: &backend-env
   ENV_FILE: docker
   ENVIRONMENT: staging
   DATABASE_URL: mariadb+aiomysql://${DB_USER:-leadgen_user}:${DB_PASSWORD:-leadgen_pass}@db:3306/${DB_NAME:-leadgen_db}
-  REDIS_URL: redis://redis:6379/0
-  CELERY_BROKER_URL: redis://redis:6379/0
-  CELERY_RESULT_BACKEND: redis://redis:6379/0
+  REDIS_URL: redis://redis:6381/0
+  CELERY_BROKER_URL: redis://redis:6381/0
+  CELERY_RESULT_BACKEND: redis://redis:6381/0
   LOG_LEVEL: INFO
   LOG_FORMAT: json
   API_URL: ${API_URL:-http://localhost:8000}
@@ -147,8 +147,8 @@ services:
       - "5555:5555"
     environment:
       ENVIRONMENT: staging
-      REDIS_URL: redis://redis:6379/0
-      CELERY_BROKER_URL: redis://redis:6379/0
+      REDIS_URL: redis://redis:6381/0
+      CELERY_BROKER_URL: redis://redis:6381/0
     depends_on:
       - redis
       - worker
@@ -194,14 +194,17 @@ services:
 
   redis:
     image: redis:7-alpine
+    # Non-default port 6381 (both sides) so it can never collide with a host
+    # redis on 6379. All REDIS_URL/CELERY_* URLs in this file use 6381 too.
+    command: ["redis-server", "--port", "6381"]
     ports:
-      - "6379:6379"
+      - "6381:6381"
     volumes:
       - redis_data:/data
     networks:
       - leadgen-network
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-p", "6381", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5

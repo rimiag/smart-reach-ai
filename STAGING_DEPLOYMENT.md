@@ -136,7 +136,7 @@ Notes:
 | Key | Why |
 |---|---|
 | `DATABASE_URL` | compose builds it as `mariadb+aiomysql://$DB_USER:$DB_PASSWORD@db:3306/$DB_NAME` - container-internal hostname. |
-| `REDIS_URL`, `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND` | compose forces `redis://redis:6379/0`. |
+| `REDIS_URL`, `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND` | compose forces `redis://redis:6381/0` (redis runs on non-default port 6381). |
 | `ENVIRONMENT`, `LOG_LEVEL`, `LOG_FORMAT` | compose forces `staging` / `INFO` / `json`. |
 | `NEXT_PUBLIC_API_URL` | NOT an env file key - it is a GitHub repo **variable** baked into the frontend bundle at build time (Settings -> Secrets and variables -> Actions -> Variables; workflow falls back to `http://192.168.1.30:8000`). |
 | `IMAGE_TAG` | exported by the pipeline per deploy. |
