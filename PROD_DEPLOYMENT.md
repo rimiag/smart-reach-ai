@@ -27,8 +27,9 @@ browser ──HTTPS──▶ nginx (already on the EC2, ports 80/443, your websi
   (a LAN-isolated VM), this host is internet-facing — nothing new gets exposed.
 - Only **80/443 (+ SSH)** should be open in the AWS Security Group.
 - Images come from GHCR (`prod-<sha7>` tags), built by `.github/workflows/ci-cd-prod.yml`.
-  The prod deploy is **manual**: Actions → "Deploy to Production" → Run workflow. Pushes to
-  main keep auto-deploying **staging only**.
+  **Deploys are manual for both environments**: staging via Actions → "Build and Deploy" →
+  Run workflow, prod via Actions → "Deploy to Production" → Run workflow. Pushing to main
+  never deploys anything.
 
 ---
 
@@ -199,7 +200,8 @@ reading the repo variable (staging VM URL); prod builds read the https API URL.
 
 ## 5. First deploy
 
-1. Commit + push the prod files to `main` (staging auto-deploys as usual — that's expected).
+1. Commit + push the prod files to `main` (pushing alone deploys nothing — both workflows
+   are manual now).
 2. Confirm DNS resolves: `dig +short reachpulse.medidatalab.com` / `api.medidatalab.com` both
    return the EC2 IP **before** running certbot (Let's Encrypt needs working DNS).
 3. nginx vhosts enabled and reloaded (§3.5), certbot done (§3.6).

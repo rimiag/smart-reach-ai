@@ -11,7 +11,7 @@ dependency bots, no vulnerability scanners.
 ## How it works
 
 ```
-push to main
+Actions -> "Build and Deploy" -> Run workflow (MANUAL - a push to main does NOT deploy)
    ├─ build backend image  → ghcr.io/rimiag/smart-reach-ai-backend:sha-<short> (+ latest)
    ├─ build frontend image → ghcr.io/rimiag/smart-reach-ai-frontend:sha-<short> (+ latest)
    └─ deploy               → runs ON the staging VM (self-hosted runner)

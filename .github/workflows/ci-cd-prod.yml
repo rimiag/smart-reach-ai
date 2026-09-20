@@ -2,9 +2,9 @@
 # SmartReach AI - Deploy to PRODUCTION (manual, gated)
 # =============================================================================
 # Production = the existing AWS EC2 that also hosts your website
-# (reachpulse.<domain> + api.<domain> behind its nginx). This pipeline is
-# INTENTIONALLY manual: staging (ci-cd.yml) auto-deploys every push to main;
-# production only deploys when you click "Run workflow" here.
+# (reachpulse.medidatalab.com + api.medidatalab.com behind its nginx). BOTH
+# pipelines are manual: staging (ci-cd.yml) and production each deploy only
+# when you click "Run workflow" here - pushing to main never deploys anything.
 #
 # What runs:
 #   1. build backend image  -> ghcr.io/rimiag/smart-reach-ai-backend:prod-<sha7>

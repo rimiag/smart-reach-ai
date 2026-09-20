@@ -29,7 +29,7 @@ gh variable set RESET_STAGING_DB -R rimiag/smart-reach-ai --body yes
 #    (or: GitHub web UI -> Settings -> Secrets and variables -> Actions ->
 #     Variables -> New repository variable, name RESET_STAGING_DB, value yes)
 
-# 3. Push to main (or Actions -> "Build and Deploy" -> Run workflow).
+# 3. Actions -> "Build and Deploy" -> Run workflow (branch main).
 #    The deploy wipes the db volume, re-initializes it with the CURRENT
 #    .staging.env, and the app creates all tables itself.
 
@@ -42,7 +42,7 @@ Then verify with the checklist in section 7.
 ## 1. How deployment works
 
 ```
-push to main  (or Actions -> Run workflow)
+Actions -> "Build and Deploy" -> Run workflow   (MANUAL - pushing to main does NOT deploy)
    |
    +-- [cloud] build backend image  -> ghcr.io/rimiag/smart-reach-ai-backend:sha-<7>
    +-- [cloud] build frontend image -> ghcr.io/rimiag/smart-reach-ai-frontend:sha-<7>
@@ -178,11 +178,11 @@ Steps:
 1. First make sure `/opt/smart-reach-ai-staging/.staging.env` on the VM is
    correct (section 3) - the reset bakes THOSE values into the fresh volume.
 2. Arm it: `gh variable set RESET_STAGING_DB -R rimiag/smart-reach-ai --body yes`
-3. Push to main or Actions -> Run workflow.
+3. Actions -> Run workflow (branch main).
 4. Confirm the run is green and the checklist (section 7) passes.
 5. Disarm immediately: `gh variable set RESET_STAGING_DB -R rimiag/smart-reach-ai --body no`
    (the deploy logs a loud warning while it is armed, but do not leave it on -
-   any future push would wipe staging data).
+   any future deploy RUN would wipe staging data).
 
 After a reset, users must register again (the `users` table is empty).
 
@@ -314,9 +314,9 @@ Staging is this exact stack; production differs only in degree, not in kind:
 - **Secrets**: production gets its OWN `SECRET_KEY` / `ENCRYPTION_KEY` and DB
   credentials (no sharing with staging/laptop), kept in the production host's
   env file or a secrets manager.
-- **Deploy gate**: today every push to main auto-deploys staging. For
-  production, add an environment with required reviewers on the deploy job
-  rather than a new pipeline.
+- **Deploy gate**: deploys are manual for BOTH environments (Actions → Run workflow);
+  pushing to main deploys nothing. Production additionally uses the `production`
+  GitHub Environment for its build-time API URL variable.
 - **Data**: the section-5 volume reset stops being an option; schema changes
   go through Alembic (section 6, third row) from the first production deploy.
 

@@ -1,13 +1,17 @@
 # =============================================================================
-# SmartReach AI - Build & Deploy (the ONLY pipeline)
+# SmartReach AI - Build & Deploy STAGING (manual, gated)
 # =============================================================================
-# One push to main:
+# MANUAL deploy: GitHub Actions -> "Build and Deploy" -> Run workflow
+# (branch: main). Pushing code to main NEVER deploys anything - neither
+# staging nor prod (prod has its own manual workflow: ci-cd-prod.yml).
+#
+# What a run does:
 #   1. build backend image  -> ghcr.io/rimiag/smart-reach-ai-backend
 #   2. build frontend image -> ghcr.io/rimiag/smart-reach-ai-frontend
 #   3. deploy on the staging VM (192.168.1.30) via its self-hosted runner
 #
 # Images are tagged sha-<short> (immutable) + latest, so the VM always runs
-# exactly the commit that was pushed.
+# exactly the commit that was built (head of the branch you picked).
 #   Rollback: Actions -> older green run -> "Re-run all jobs"
 #   (or on the VM: export IMAGE_TAG=sha-<old7> && docker compose up -d)
 #
@@ -17,11 +21,9 @@
 name: Build and Deploy
 
 on:
-  push:
-    branches: [main]
-  # Manual trigger (Actions tab -> Build and Deploy -> Run workflow) for ops
-  # moves that need a redeploy without a new commit, e.g. after changing the
-  # NEXT_PUBLIC_API_URL variable or a RESET_STAGING_DB db reset.
+  # Manual only (Actions tab -> Build and Deploy -> Run workflow). A push to
+  # main does NOT deploy. Covers normal releases as well as ops moves like
+  # changing the NEXT_PUBLIC_API_URL variable or a RESET_STAGING_DB db reset.
   workflow_dispatch:
 
 concurrency:
@@ -120,9 +122,9 @@ jobs:
           cp /opt/smart-reach-ai-staging/.staging.env ./.staging.env
 
       # Maintenance lever for staging: set the repo variable RESET_STAGING_DB=yes
-      # (gh variable set RESET_STAGING_DB --body yes) and push to main (or Run
-      # workflow from the Actions tab) to wipe the db volume so it re-initializes
-      # from the current .staging.env + init.sql. Deletes all staging data -
+      # (gh variable set RESET_STAGING_DB --body yes) and Run workflow from the
+      # Actions tab to wipe the db volume so it re-initializes from the current
+      # .staging.env + init.sql. Deletes all staging data -
       # keep it "no" otherwise. Reset to "no" after use. Full procedure:
       # STAGING_DEPLOYMENT.md, section "One-time staging DB reset".
       - name: Reset staging db volume (only when RESET_STAGING_DB=yes)
