@@ -50,14 +50,14 @@ browser ──HTTPS──▶ nginx (already on the EC2, ports 80/443, your websi
 ### 3.1 Security Group (AWS console)
 
 Allow: **80, 443** (already open for your website) and your SSH port. **Do NOT open**
-3000, 8000, 3306, 6379, 5555 — the containers bind to localhost or the docker network only.
+3000, 8000, 3306, 6381, 5555 — the containers bind to localhost or the docker network only.
 
 Verify from your laptop afterwards:
 
 ```bash
 # these must FAIL (timeout / refused):
 nc -zv <EC2_PUBLIC_IP> 3306
-nc -zv <EC2_PUBLIC_IP> 6379
+nc -zv <EC2_PUBLIC_IP> 6381
 nc -zv <EC2_PUBLIC_IP> 3000
 nc -zv <EC2_PUBLIC_IP> 8000
 # this must still SUCCEED:
@@ -217,7 +217,7 @@ curl -sI https://reachpulse.medidatalab.com       # HTTP/2 200 (or 307 to /login
 ```
 
 7. From outside, confirm nothing else answers:
-   `nc -zv <EC2_PUBLIC_IP> 3306` must FAIL (same for 6379 / 3000 / 8000 / 5555).
+   `nc -zv <EC2_PUBLIC_IP> 3306` must FAIL (same for 6381 / 3000 / 8000 / 5555).
 
 ---
 
