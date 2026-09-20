@@ -1,0 +1,213 @@
+# =============================================================================
+# SmartReach AI - Docker Compose (PRODUCTION)
+# =============================================================================
+# Runs on the prod EC2 next to your existing website. The host nginx proxies:
+#   smartreach.<domain> -> 127.0.0.1:3000  (frontend)
+#   api.<domain>        -> 127.0.0.1:8000  (backend)
+# See PROD_DEPLOYMENT.md for the full setup guide.
+#
+# Differences from the staging docker-compose.yml (do NOT casually merge them):
+#   * PULL-ONLY: no build: sections. Images come from GHCR pinned by IMAGE_TAG
+#     (prod-<sha7>, exported by the prod pipeline). Local builds: use the
+#     staging compose file.
+#   * NOTHING is exposed beyond what nginx needs: frontend/backend bind to
+#     127.0.0.1 only; db, redis and flower have NO host ports at all. Do not
+#     add ports: back to db/redis - this host is internet-facing.
+#   * db is MySQL 8.0 (prod) instead of MariaDB 10.1 (staging); the schema
+#     scripts in database/ are compatible with both (see database/README.md).
+#   * every service restarts unless-stopped (prod must survive reboots).
+#
+# Configuration:
+#   ./.prod.env -> required. Template: .prod.env.example. The pipeline copies
+#                  it from /opt/smart-reach-ai-prod/.prod.env into the checkout
+#                  before running compose. Never commit it (gitignored).
+#
+# Rollback: GitHub Actions -> Deploy to Production -> Run workflow ->
+#   image_tag = prod-<older-sha7>. Manually:
+#   export IMAGE_TAG=prod-old1234 && docker compose -f docker-compose.prod.yml up -d
+# =============================================================================
+
+name: smart-reach-ai-prod
+
+x-backend-env: &backend-env
+  ENV_FILE: docker
+  ENVIRONMENT: production
+  DATABASE_URL: mysql+aiomysql://${DB_USER:-leadgen_user}:${DB_PASSWORD:-leadgen_pass}@db:3306/${DB_NAME:-leadgen_db}
+  REDIS_URL: redis://redis:6379/0
+  CELERY_BROKER_URL: redis://redis:6379/0
+  CELERY_RESULT_BACKEND: redis://redis:6379/0
+  LOG_LEVEL: INFO
+  LOG_FORMAT: json
+  API_URL: ${API_URL:-https://api.YOURDOMAIN.COM}
+  FRONTEND_URL: ${FRONTEND_URL:-https://smartreach.YOURDOMAIN.COM}
+  # Prod origin must always be allowed, even if .prod.env wasn't sourced when
+  # the stack was brought up. Replace YOURDOMAIN.COM with your real domain
+  # (also update it in .prod.env).
+  CORS_ORIGINS: ${CORS_ORIGINS:-https://smartreach.YOURDOMAIN.COM}
+
+services:
+  frontend:
+    image: ghcr.io/rimiag/smart-reach-ai-frontend:${IMAGE_TAG:-prod-latest}
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      NODE_ENV: production
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - leadgen-network
+    restart: unless-stopped
+
+  backend:
+    image: ghcr.io/rimiag/smart-reach-ai-backend:${IMAGE_TAG:-prod-latest}
+    ports:
+      - "127.0.0.1:8000:8000"
+    env_file:
+      - ./.prod.env
+    environment:
+      <<: *backend-env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - leadgen-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 5
+    restart: unless-stopped
+
+  worker:
+    image: ghcr.io/rimiag/smart-reach-ai-backend:${IMAGE_TAG:-prod-latest}
+    command: celery -A app.tasks.celery_app worker --loglevel=info --concurrency=2 --queues=celery,search,crawl,ai,email
+    env_file:
+      - ./.prod.env
+    environment:
+      <<: *backend-env
+    depends_on:
+      backend:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - leadgen-network
+    healthcheck:
+      test: ["CMD", "celery", "-A", "app.tasks.celery_app", "inspect", "ping"]
+      interval: 30s
+      timeout: 10s
+      start_period: 40s
+      retries: 3
+    restart: unless-stopped
+
+  scheduler:
+    image: ghcr.io/rimiag/smart-reach-ai-backend:${IMAGE_TAG:-prod-latest}
+    command: celery -A app.tasks.celery_app beat --loglevel=info --schedule /tmp/celerybeat-schedule
+    env_file:
+      - ./.prod.env
+    environment:
+      <<: *backend-env
+    volumes:
+      - celerybeat-data:/tmp/celerybeat
+    user: root
+    depends_on:
+      backend:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      worker:
+        condition: service_started
+    networks:
+      - leadgen-network
+    healthcheck:
+      test: ["CMD", "celery", "-A", "app.tasks.celery_app", "inspect", "ping"]
+      interval: 30s
+      timeout: 10s
+      start_period: 40s
+      retries: 3
+    restart: unless-stopped
+
+  flower:
+    image: ghcr.io/rimiag/smart-reach-ai-backend:${IMAGE_TAG:-prod-latest}
+    command: celery -A app.tasks.celery_app flower --port=5555
+    # Localhost only - reach it through an SSH tunnel when you need it:
+    #   ssh -L 5555:127.0.0.1:5555 <ec2>
+    ports:
+      - "127.0.0.1:5555:5555"
+    environment:
+      ENVIRONMENT: production
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+    depends_on:
+      - redis
+      - worker
+    networks:
+      - leadgen-network
+    # Override the Dockerfile HEALTHCHECK (which probes port 8000 - only
+    # correct for the API container) with flower's own HTTP health endpoint.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:5555/healthcheck', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      start_period: 20s
+      retries: 3
+    restart: unless-stopped
+
+  # MySQL 8.0 in production (staging runs MariaDB 10.1; the schema scripts in
+  # database/ work on both). The entrypoint initializes an EMPTY volume with
+  # MYSQL_* below and runs backend/db/init.sql (charset setup only - tables
+  # are created by the backend entrypoint).
+  db:
+    image: mysql:8.0
+    # NO ports: - the db is reachable only from inside leadgen-network.
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_password_change_in_production}
+      MYSQL_DATABASE: ${DB_NAME:-leadgen_db}
+      MYSQL_USER: ${DB_USER:-leadgen_user}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-leadgen_pass}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./backend/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - leadgen-network
+    healthcheck:
+      # Real auth check: verifies the APP user can actually connect with the
+      # credentials configured here ("mysqladmin ping" alone reports healthy
+      # even when authentication is broken - it once masked a credential
+      # drift on staging, see STAGING_DEPLOYMENT.md).
+      test: ["CMD-SHELL", "mysql -u $${MYSQL_USER} -p$${MYSQL_PASSWORD} -e 'SELECT 1' $${MYSQL_DATABASE:-leadgen_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      # First boot of an empty volume initializes the data directory, which
+      # can take a couple of minutes on a small instance.
+      start_period: 120s
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    # NO ports: - redis is reachable only from inside leadgen-network.
+    volumes:
+      - redis_data:/data
+    networks:
+      - leadgen-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+networks:
+  leadgen-network:
+    driver: bridge
+
+volumes:
+  mysql_data:
+  redis_data:
+  celerybeat-data:

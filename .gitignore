@@ -73,6 +73,7 @@ Thumbs.db
 # CI/CD deployment secrets (server-side only)
 # =========================
 .staging.env
+.prod.env
 
 
 # TypeScript incremental build cache
