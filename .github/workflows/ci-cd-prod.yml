@@ -2,7 +2,7 @@
 # SmartReach AI - Deploy to PRODUCTION (manual, gated)
 # =============================================================================
 # Production = the existing AWS EC2 that also hosts your website
-# (smartreach.<domain> + api.<domain> behind its nginx). This pipeline is
+# (reachpulse.<domain> + api.<domain> behind its nginx). This pipeline is
 # INTENTIONALLY manual: staging (ci-cd.yml) auto-deploys every push to main;
 # production only deploys when you click "Run workflow" here.
 #
@@ -95,7 +95,7 @@ jobs:
           if [ -z "${{ vars.NEXT_PUBLIC_API_URL }}" ]; then
             echo "::error::NEXT_PUBLIC_API_URL is not set on the 'production' GitHub Environment."
             echo "Fix: repo Settings > Environments > production > Add variable"
-            echo "     Name: NEXT_PUBLIC_API_URL   Value: https://api.YOURDOMAIN.COM"
+            echo "     Name: NEXT_PUBLIC_API_URL   Value: https://api.medidatalab.com"
             exit 1
           fi
           echo "Baking NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL }}"

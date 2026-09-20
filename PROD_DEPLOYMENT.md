@@ -6,7 +6,8 @@ that already serves your website.
 Related guides: STAGING_DEPLOYMENT.md (staging VM) · database/README.md (schema scripts) ·
 CICD_SETUP.md (runner bootstrap details).
 
-**Replace `YOURDOMAIN.COM` with your real domain everywhere below.**
+**App URL: `https://reachpulse.medidatalab.com` · API URL: `https://api.medidatalab.com`**
+(Your website stays on its existing `medidatalab.com` nginx config — untouched.)
 
 ---
 
@@ -14,8 +15,8 @@ CICD_SETUP.md (runner bootstrap details).
 
 ```
 browser ──HTTPS──▶ nginx (already on the EC2, ports 80/443, your website lives here)
-                    ├── https://smartreach.YOURDOMAIN.COM  ──▶ 127.0.0.1:3000  (frontend)
-                    └── https://api.YOURDOMAIN.COM         ──▶ 127.0.0.1:8000  (backend)
+                    ├── https://reachpulse.medidatalab.com  ──▶ 127.0.0.1:3000  (frontend)
+                    └── https://api.medidatalab.com         ──▶ 127.0.0.1:8000  (backend)
                                                                   └─ internal docker network:
                                             db (MySQL 8) · redis · worker · scheduler · flower
 ```
@@ -59,7 +60,7 @@ nc -zv <EC2_PUBLIC_IP> 6379
 nc -zv <EC2_PUBLIC_IP> 3000
 nc -zv <EC2_PUBLIC_IP> 8000
 # this must still SUCCEED:
-curl -I https://YOURDOMAIN.COM
+curl -I https://medidatalab.com
 ```
 
 ### 3.2 Install Docker + Compose plugin
@@ -77,12 +78,12 @@ docker compose version          # should print v2.x
 sudo mkdir -p /opt/smart-reach-ai-prod
 sudo cp <local-checkout>/.prod.env.example /opt/smart-reach-ai-prod/.prod.env
 sudo chmod 600 /opt/smart-reach-ai-prod/.prod.env
-sudo nano /opt/smart-reach-ai-prod/.prod.env    # fill in real values, replace YOURDOMAIN.COM
+sudo nano /opt/smart-reach-ai-prod/.prod.env    # fill in real values, replace medidatalab.com
 ```
 
 Key values: strong `DB_PASSWORD` / `MYSQL_ROOT_PASSWORD` / `SECRET_KEY` / `ENCRYPTION_KEY`
-(generation commands are in the file's comments); URLs `https://api.YOURDOMAIN.COM` /
-`https://smartreach.YOURDOMAIN.COM`; `CORS_ORIGINS=https://smartreach.YOURDOMAIN.COM`;
+(generation commands are in the file's comments); URLs `https://api.medidatalab.com` /
+`https://reachpulse.medidatalab.com`; `CORS_ORIGINS=https://reachpulse.medidatalab.com`;
 `SERPAPI_KEY` etc.
 
 ### 3.4 DNS records
@@ -91,22 +92,22 @@ Create two **A records** pointing at the EC2 public IP (same IP as your website)
 
 | Name | Type | Value |
 |---|---|---|
-| `smartreach` | A | `<EC2_PUBLIC_IP>` |
+| `reachpulse` | A | `<EC2_PUBLIC_IP>` |
 | `api` | A | `<EC2_PUBLIC_IP>` |
 
 Recommendation: convert the instance to an **Elastic IP** first if it doesn't have one —
 auto-assigned public IPs change on stop/start, which would silently break DNS + certs.
-Verify: `dig +short smartreach.YOURDOMAIN.COM` returns the EC2 IP from anywhere.
+Verify: `dig +short reachpulse.medidatalab.com` returns the EC2 IP from anywhere.
 
 ### 3.5 nginx vhosts for the two subdomains
 
-Create `/etc/nginx/sites-available/smartreach.conf`:
+Create `/etc/nginx/sites-available/reachpulse.conf`:
 
 ```nginx
-# Frontend - smartreach.YOURDOMAIN.COM
+# Frontend - reachpulse.medidatalab.com
 server {
     listen 80;
-    server_name smartreach.YOURDOMAIN.COM;
+    server_name reachpulse.medidatalab.com;
 
     client_max_body_size 20m;
 
@@ -123,10 +124,10 @@ server {
     }
 }
 
-# API - api.YOURDOMAIN.COM
+# API - api.medidatalab.com
 server {
     listen 80;
-    server_name api.YOURDOMAIN.COM;
+    server_name api.medidatalab.com;
 
     client_max_body_size 20m;
 
@@ -145,7 +146,7 @@ server {
 Enable + reload:
 
 ```bash
-sudo ln -s /etc/nginx/sites-available/smartreach.conf /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/reachpulse.conf /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
@@ -153,7 +154,7 @@ sudo nginx -t && sudo systemctl reload nginx
 
 ```bash
 sudo apt install -y certbot python3-certbot-nginx   # skip if certbot already installed
-sudo certbot --nginx -d smartreach.YOURDOMAIN.COM -d api.YOURDOMAIN.COM --redirect
+sudo certbot --nginx -d reachpulse.medidatalab.com -d api.medidatalab.com --redirect
 ```
 
 certbot edits the two server blocks to serve HTTPS and adds HTTP→HTTPS redirects; its
@@ -186,7 +187,7 @@ under your sudo login user, not a fresh system user, to keep this simple.
 
 1. GitHub → **Settings → Environments → New environment** → name: `production` (exact).
 2. On the environment: **Add variable** (not secret):
-   - Name: `NEXT_PUBLIC_API_URL` — Value: `https://api.YOURDOMAIN.COM`
+   - Name: `NEXT_PUBLIC_API_URL` — Value: `https://api.medidatalab.com`
 3. No required reviewers: the workflow is manual, so *you clicking "Run workflow" is the
    gate*. Add required reviewers later (environment settings) if teammates start pushing.
 
@@ -199,7 +200,7 @@ reading the repo variable (staging VM URL); prod builds read the https API URL.
 ## 5. First deploy
 
 1. Commit + push the prod files to `main` (staging auto-deploys as usual — that's expected).
-2. Confirm DNS resolves: `dig +short smartreach.YOURDOMAIN.COM` / `api.YOURDOMAIN.COM` both
+2. Confirm DNS resolves: `dig +short reachpulse.medidatalab.com` / `api.medidatalab.com` both
    return the EC2 IP **before** running certbot (Let's Encrypt needs working DNS).
 3. nginx vhosts enabled and reloaded (§3.5), certbot done (§3.6).
 4. GitHub → Actions → **Deploy to Production** → Run workflow → leave `image_tag` EMPTY → Run.
@@ -209,8 +210,8 @@ reading the repo variable (staging VM URL); prod builds read the https API URL.
 6. Verify from your laptop:
 
 ```bash
-curl -s https://api.YOURDOMAIN.COM/health        # {"status":"ok",...}
-curl -sI https://smartreach.YOURDOMAIN.COM       # HTTP/2 200 (or 307 to /login)
+curl -s https://api.medidatalab.com/health        # {"status":"ok",...}
+curl -sI https://reachpulse.medidatalab.com       # HTTP/2 200 (or 307 to /login)
 ```
 
 7. From outside, confirm nothing else answers:
@@ -220,7 +221,7 @@ curl -sI https://smartreach.YOURDOMAIN.COM       # HTTP/2 200 (or 307 to /login)
 
 ## 6. Admin bootstrap
 
-1. Register a normal account at `https://smartreach.YOURDOMAIN.COM/register` (e.g. your
+1. Register a normal account at `https://reachpulse.medidatalab.com/register` (e.g. your
    rizwancl@gmail.com account).
 2. Promote it on the EC2 (works from any directory):
 
@@ -300,14 +301,14 @@ database/README.md ("Full recovery").
 
 ## 9. Email deliverability
 
-Before sending real outreach from prod, publish these DNS records for YOURDOMAIN.COM (your
+Before sending real outreach from prod, publish these DNS records for medidatalab.com (your
 SMTP provider's docs give the exact values):
 
 - **SPF** — TXT on `@`: `v=spf1 include:<provider-include> ~all` (Gmail:
   `include:_spf.google.com`). One SPF record per domain, merge includes into it.
 - **DKIM** — the TXT/CNAME your SMTP provider generates (Gmail: Admin console → Apps →
   Google Workspace → Gmail → Authenticate email).
-- **DMARC** — TXT on `_dmarc`: `v=DMARC1; p=none; rua=mailto:postmaster@YOURDOMAIN.COM`
+- **DMARC** — TXT on `_dmarc`: `v=DMARC1; p=none; rua=mailto:postmaster@medidatalab.com`
   (start with `p=none`, watch reports, tighten to quarantine/reject later).
 
 Cold email from a fresh domain without these lands in spam — do this before the first real
@@ -318,7 +319,7 @@ campaign.
 ## 10. Monitoring
 
 Add a free uptime monitor (UptimeRobot, Better Stack, ...) hitting
-`https://api.YOURDOMAIN.COM/health` every 5 minutes, alerting your email/phone. The backend
+`https://api.medidatalab.com/health` every 5 minutes, alerting your email/phone. The backend
 exposes `/health`; monitoring the frontend URL too costs nothing.
 
 ---

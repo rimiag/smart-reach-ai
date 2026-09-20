@@ -2,7 +2,7 @@
 # SmartReach AI - Docker Compose (PRODUCTION)
 # =============================================================================
 # Runs on the prod EC2 next to your existing website. The host nginx proxies:
-#   smartreach.<domain> -> 127.0.0.1:3000  (frontend)
+#   reachpulse.<domain> -> 127.0.0.1:3000  (frontend)
 #   api.<domain>        -> 127.0.0.1:8000  (backend)
 # See PROD_DEPLOYMENT.md for the full setup guide.
 #
@@ -38,12 +38,11 @@ x-backend-env: &backend-env
   CELERY_RESULT_BACKEND: redis://redis:6379/0
   LOG_LEVEL: INFO
   LOG_FORMAT: json
-  API_URL: ${API_URL:-https://api.YOURDOMAIN.COM}
-  FRONTEND_URL: ${FRONTEND_URL:-https://smartreach.YOURDOMAIN.COM}
+  API_URL: ${API_URL:-https://api.medidatalab.com}
+  FRONTEND_URL: ${FRONTEND_URL:-https://reachpulse.medidatalab.com}
   # Prod origin must always be allowed, even if .prod.env wasn't sourced when
-  # the stack was brought up. Replace YOURDOMAIN.COM with your real domain
-  # (also update it in .prod.env).
-  CORS_ORIGINS: ${CORS_ORIGINS:-https://smartreach.YOURDOMAIN.COM}
+  # the stack was brought up.
+  CORS_ORIGINS: ${CORS_ORIGINS:-https://reachpulse.medidatalab.com}
 
 services:
   frontend:
