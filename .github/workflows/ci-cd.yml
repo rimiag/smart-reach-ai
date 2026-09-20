@@ -1,17 +1,22 @@
 # =============================================================================
-# SmartReach AI - Build & Deploy STAGING (manual, gated)
+# SmartReach AI - Build & Deploy STAGING (manual, branch-pinned)
 # =============================================================================
-# MANUAL deploy: GitHub Actions -> "Build and Deploy" -> Run workflow
-# (branch: main). Pushing code to main NEVER deploys anything - neither
-# staging nor prod (prod has its own manual workflow: ci-cd-prod.yml).
+# MANUAL deploy: GitHub Actions -> "Build and Deploy" -> Run workflow.
+# A run ALWAYS builds and deploys the head of the STAGING branch, no matter
+# which branch is picked in the dialog. Pushing code (to any branch) NEVER
+# deploys anything. Prod has its own manual workflow (ci-cd-prod.yml) pinned
+# to main the same way.
+#
+# Branch model: work lands on "staging" -> run this workflow -> test on the
+# staging VM -> merge "staging" into "main" -> run "Deploy to Production".
 #
 # What a run does:
 #   1. build backend image  -> ghcr.io/rimiag/smart-reach-ai-backend
 #   2. build frontend image -> ghcr.io/rimiag/smart-reach-ai-frontend
 #   3. deploy on the staging VM (192.168.1.30) via its self-hosted runner
 #
-# Images are tagged sha-<short> (immutable) + latest, so the VM always runs
-# exactly the commit that was built (head of the branch you picked).
+# Images are tagged sha-<short-of-staging-head> (immutable) + latest, so the
+# VM always runs exactly the staging-branch commit that was built.
 #   Rollback: Actions -> older green run -> "Re-run all jobs"
 #   (or on the VM: export IMAGE_TAG=sha-<old7> && docker compose up -d)
 #
@@ -22,8 +27,8 @@ name: Build and Deploy
 
 on:
   # Manual only (Actions tab -> Build and Deploy -> Run workflow). A push to
-  # main does NOT deploy. Covers normal releases as well as ops moves like
-  # changing the NEXT_PUBLIC_API_URL variable or a RESET_STAGING_DB db reset.
+  # any branch does NOT deploy. Covers normal releases as well as ops moves
+  # like changing the NEXT_PUBLIC_API_URL variable or a RESET_STAGING_DB reset.
   workflow_dispatch:
 
 concurrency:
@@ -31,19 +36,35 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Single source of truth for the image tag: the head of the staging branch
+  # at the moment the run starts. Build and deploy jobs reuse this output, so
+  # they can never disagree about what was built vs deployed.
+  resolve:
+    name: Resolve staging head
+    runs-on: ubuntu-latest
+    outputs:
+      short: ${{ steps.sha.outputs.short }}
+    steps:
+      - name: Checkout staging branch
+        uses: actions/checkout@v4
+        with:
+          ref: staging
+      - name: Short sha of staging head
+        id: sha
+        run: echo "short=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+
   build-backend:
     name: Build backend image
+    needs: resolve
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     steps:
-      - name: Checkout
+      - name: Checkout staging branch
         uses: actions/checkout@v4
-
-      - name: Short sha
-        id: vars
-        run: echo "short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+        with:
+          ref: staging
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -61,24 +82,23 @@ jobs:
           context: ./backend
           push: true
           tags: |
-            ghcr.io/rimiag/smart-reach-ai-backend:sha-${{ steps.vars.outputs.short }}
+            ghcr.io/rimiag/smart-reach-ai-backend:sha-${{ needs.resolve.outputs.short }}
             ghcr.io/rimiag/smart-reach-ai-backend:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
   build-frontend:
     name: Build frontend image
+    needs: resolve
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     steps:
-      - name: Checkout
+      - name: Checkout staging branch
         uses: actions/checkout@v4
-
-      - name: Short sha
-        id: vars
-        run: echo "short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+        with:
+          ref: staging
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -98,7 +118,7 @@ jobs:
           context: ./frontend
           push: true
           tags: |
-            ghcr.io/rimiag/smart-reach-ai-frontend:sha-${{ steps.vars.outputs.short }}
+            ghcr.io/rimiag/smart-reach-ai-frontend:sha-${{ needs.resolve.outputs.short }}
             ghcr.io/rimiag/smart-reach-ai-frontend:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -107,11 +127,15 @@ jobs:
 
   deploy:
     name: Deploy to staging VM (192.168.1.30)
-    needs: [build-backend, build-frontend]
+    needs: [resolve, build-backend, build-frontend]
     runs-on: [self-hosted, staging]
+    env:
+      IMAGE_TAG: sha-${{ needs.resolve.outputs.short }}
     steps:
-      - name: Checkout
+      - name: Checkout staging branch
         uses: actions/checkout@v4
+        with:
+          ref: staging
 
       - name: Prepare .staging.env
         run: |
@@ -149,7 +173,6 @@ jobs:
       - name: Pull and restart services
         run: |
           set -a; . ./.staging.env; set +a
-          export IMAGE_TAG=sha-${GITHUB_SHA::7}
           echo "Deploying $IMAGE_TAG to staging VM"
           docker compose -f docker-compose.yml pull
           docker compose -f docker-compose.yml up -d --remove-orphans
@@ -160,7 +183,6 @@ jobs:
       - name: Dump diagnostics on failure
         if: failure()
         run: |
-          export IMAGE_TAG=sha-${GITHUB_SHA::7}
           echo "=== compose ps (all) ==="
           docker compose -f docker-compose.yml ps -a || true
           echo "=== backend logs (last 150 lines) ==="

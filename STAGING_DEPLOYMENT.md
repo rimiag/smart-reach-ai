@@ -29,7 +29,7 @@ gh variable set RESET_STAGING_DB -R rimiag/smart-reach-ai --body yes
 #    (or: GitHub web UI -> Settings -> Secrets and variables -> Actions ->
 #     Variables -> New repository variable, name RESET_STAGING_DB, value yes)
 
-# 3. Actions -> "Build and Deploy" -> Run workflow (branch main).
+# 3. Actions -> "Build and Deploy" -> Run workflow (deploys the STAGING branch).
 #    The deploy wipes the db volume, re-initializes it with the CURRENT
 #    .staging.env, and the app creates all tables itself.
 
@@ -42,7 +42,7 @@ Then verify with the checklist in section 7.
 ## 1. How deployment works
 
 ```
-Actions -> "Build and Deploy" -> Run workflow   (MANUAL - pushing to main does NOT deploy)
+Actions -> "Build and Deploy" -> Run workflow   (MANUAL - deploys the STAGING branch)
    |
    +-- [cloud] build backend image  -> ghcr.io/rimiag/smart-reach-ai-backend:sha-<7>
    +-- [cloud] build frontend image -> ghcr.io/rimiag/smart-reach-ai-frontend:sha-<7>
@@ -178,7 +178,7 @@ Steps:
 1. First make sure `/opt/smart-reach-ai-staging/.staging.env` on the VM is
    correct (section 3) - the reset bakes THOSE values into the fresh volume.
 2. Arm it: `gh variable set RESET_STAGING_DB -R rimiag/smart-reach-ai --body yes`
-3. Actions -> Run workflow (branch main).
+3. Actions -> Run workflow (deploys the STAGING branch).
 4. Confirm the run is green and the checklist (section 7) passes.
 5. Disarm immediately: `gh variable set RESET_STAGING_DB -R rimiag/smart-reach-ai --body no`
    (the deploy logs a loud warning while it is armed, but do not leave it on -

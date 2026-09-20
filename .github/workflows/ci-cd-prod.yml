@@ -3,8 +3,9 @@
 # =============================================================================
 # Production = the existing AWS EC2 that also hosts your website
 # (reachpulse.medidatalab.com + api.medidatalab.com behind its nginx). BOTH
-# pipelines are manual: staging (ci-cd.yml) and production each deploy only
-# when you click "Run workflow" here - pushing to main never deploys anything.
+# pipelines are manual and branch-pinned: this one ALWAYS builds and deploys
+# the head of MAIN (staging's ci-cd.yml is pinned to the staging branch the
+# same way). Pushing to any branch never deploys anything.
 #
 # What runs:
 #   1. build backend image  -> ghcr.io/rimiag/smart-reach-ai-backend:prod-<sha7>
@@ -36,19 +37,35 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Single source of truth for the image tag: the head of MAIN at the moment
+  # the run starts. Build and deploy jobs reuse this output, so they can never
+  # disagree about what was built vs deployed.
+  resolve:
+    name: Resolve main head
+    runs-on: ubuntu-latest
+    outputs:
+      short: ${{ steps.sha.outputs.short }}
+    steps:
+      - name: Checkout main branch
+        uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Short sha of main head
+        id: sha
+        run: echo "short=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+
   build-backend:
     name: Build backend image (prod)
+    needs: resolve
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     steps:
-      - name: Checkout
+      - name: Checkout main branch
         uses: actions/checkout@v4
-
-      - name: Short sha
-        id: vars
-        run: echo "short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+        with:
+          ref: main
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -66,13 +83,14 @@ jobs:
           context: ./backend
           push: true
           tags: |
-            ghcr.io/rimiag/smart-reach-ai-backend:prod-${{ steps.vars.outputs.short }}
+            ghcr.io/rimiag/smart-reach-ai-backend:prod-${{ needs.resolve.outputs.short }}
             ghcr.io/rimiag/smart-reach-ai-backend:prod-latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
   build-frontend:
     name: Build frontend image (prod)
+    needs: resolve
     # Declaring the environment makes the env-scoped NEXT_PUBLIC_API_URL
     # variable visible here (it overrides the repo variable of the same name).
     environment: production
@@ -81,12 +99,10 @@ jobs:
       contents: read
       packages: write
     steps:
-      - name: Checkout
+      - name: Checkout main branch
         uses: actions/checkout@v4
-
-      - name: Short sha
-        id: vars
-        run: echo "short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+        with:
+          ref: main
 
       # Fail with a clear message instead of silently baking an empty/wrong
       # API URL into the prod frontend bundle.
@@ -116,7 +132,7 @@ jobs:
           context: ./frontend
           push: true
           tags: |
-            ghcr.io/rimiag/smart-reach-ai-frontend:prod-${{ steps.vars.outputs.short }}
+            ghcr.io/rimiag/smart-reach-ai-frontend:prod-${{ needs.resolve.outputs.short }}
             ghcr.io/rimiag/smart-reach-ai-frontend:prod-latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -125,12 +141,14 @@ jobs:
 
   deploy-prod:
     name: Deploy to prod EC2
-    needs: [build-backend, build-frontend]
+    needs: [resolve, build-backend, build-frontend]
     environment: production
     runs-on: [self-hosted, prod]
     steps:
-      - name: Checkout
+      - name: Checkout main branch
         uses: actions/checkout@v4
+        with:
+          ref: main
 
       # Resolve the tag once: the workflow input (rollback) or this commit's
       # prod-<sha7>. Exported via GITHUB_ENV so every later step sees it.
@@ -140,8 +158,8 @@ jobs:
             echo "IMAGE_TAG=${{ inputs.image_tag }}" >> "$GITHUB_ENV"
             echo "Rolling back to existing tag ${{ inputs.image_tag }}"
           else
-            echo "IMAGE_TAG=prod-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
-            echo "Deploying prod-${GITHUB_SHA::7}"
+            echo "IMAGE_TAG=prod-${{ needs.resolve.outputs.short }}" >> "$GITHUB_ENV"
+            echo "Deploying prod-${{ needs.resolve.outputs.short }} (head of main)"
           fi
 
       - name: Prepare .prod.env
