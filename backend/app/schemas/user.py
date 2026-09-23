@@ -64,6 +64,9 @@ class UserResponse(UserBase):
     id: int
     role: str
     is_active: bool
+    # Default True keeps auth flows working against a users table that has not
+    # received the verification columns yet (same pattern as the billing cols).
+    is_verified: bool = True
     created_at: datetime
     last_login: Optional[datetime] = None
     # Defaults keep token/auth flows working against a users table that has
@@ -86,6 +89,18 @@ class TokenRefreshRequest(BaseModel):
     """Schema for token refresh request."""
 
     refresh_token: str = Field(..., description="Refresh token")
+
+
+class VerifyEmailRequest(BaseModel):
+    """Schema for confirming an account from the email link."""
+
+    token: str = Field(..., description="Token from the verification email link")
+
+
+class ResendVerificationRequest(BaseModel):
+    """Schema for re-sending the verification email."""
+
+    email: EmailStr
 
 
 class TokenResponse(BaseModel):

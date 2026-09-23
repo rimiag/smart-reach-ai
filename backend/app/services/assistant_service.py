@@ -11,6 +11,7 @@ from typing import Any, Dict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.usage_tracking import bump_api_usage
 from app.integrations.ai_base import AIProviderError, LLMClient, get_ai_client
 from app.models.campaign import Campaign
 from app.models.email_log import EmailLog
@@ -71,6 +72,7 @@ class AssistantService:
             max_tokens=1024,
             temperature=0.3,
         )
+        await bump_api_usage(self.client.name)
         return {"answer": response.text.strip(), "model": response.model}
 
     async def _build_context(self, db: AsyncSession, user_id: int) -> str:

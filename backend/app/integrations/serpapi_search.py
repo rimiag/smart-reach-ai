@@ -11,6 +11,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from app.core.config import settings
+from app.core.usage_tracking import bump_api_usage
 from app.integrations.search_base import (
     SearchProvider,
     SearchProviderError,
@@ -68,6 +69,9 @@ class SerpAPISearchProvider(SearchProvider):
                 params["gl"] = code
 
         data = await self._request_json("GET", self.ENDPOINT, params=params)
+
+        # Count this billed request for the admin usage dashboard (fail-open).
+        await bump_api_usage(self.name)
 
         if data.get("error"):
             # SerpAPI reports quota/auth problems inside a 200 response body.

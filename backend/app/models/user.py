@@ -52,6 +52,16 @@ class User(Base):
     # Status
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
+    # Email verification. server_default TRUE is what makes ensure_schema's
+    # ALTER backfill every EXISTING user as verified when this column is added
+    # (they signed up before verification existed). Only the register endpoint
+    # creates rows with is_verified=False explicitly.
+    is_verified: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("1"), nullable=False
+    )
+    verification_token: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    verification_token_expires: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
     # Billing (admin-managed, informational - no payment gateway)
     # Plain String, not Enum: changing plans must not require an enum ALTER.
     # server_default (not just python default) so ensure_schema's ALTER can

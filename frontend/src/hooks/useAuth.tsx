@@ -64,10 +64,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const register = async (email: string, password: string, name?: string) => {
     try {
+      // Creates an unverified account and emails a confirmation link.
+      // No auto-login: the user must verify their email before signing in.
       await api.register({ email, password, name });
-
-      // Auto-login after registration
-      await login(email, password);
     } catch (error) {
       console.error('Registration failed:', error);
       throw error;
@@ -82,7 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       clearAuth();
       setUserState(null);
-      router.push('/login');
+      router.push('/'); // back to the landing page
     }
   };
 

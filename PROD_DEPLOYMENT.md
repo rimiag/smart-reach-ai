@@ -350,7 +350,8 @@ docker exec -it smart-reach-ai-prod-backend-1 python promote_admin.py <email>
 
 | Symptom | Likely cause + fix |
 |---|---|
-| nginx 502 on smartreach./api. | a container is down: `docker compose -f docker-compose.prod.yml ps -a`, then `up -d`; `ss -tlnp \| grep -E "3000\|8000"` must show docker-proxy on 127.0.0.1 |
+| subdomain shows the OTHER website (e.g. reachpulse. opens Redcap/xyz.com) | no nginx block claims that `server_name`, so the request falls to the default server — or certbot installed the new names into the default (other site's) block. Check `sudo nginx -T \| grep server_name`: fix the vhost names (§3.5), remove the app subdomains from the other site's `server_name` line, reload, re-run certbot (§3.6) so it wires SSL into the right blocks |
+| nginx 502 on reachpulse./api. | a container is down: `docker compose -f docker-compose.prod.yml ps -a`, then `up -d`; `ss -tlnp \| grep -E "3000\|8000"` must show docker-proxy on 127.0.0.1 |
 | backend unhealthy on FIRST deploy | MySQL 8 first boot initializes its data directory (1-2 min); db healthcheck allows 120s. Still failing → db logs |
 | cert errors on the new subdomains | `sudo certbot certificates`; renewal is automatic (systemd timer); test with `sudo certbot renew --dry-run` |
 | deploy can't pull from GHCR | repo secret `GHCR_PAT` expired → regenerate; or `docker login ghcr.io` once on the EC2 as fallback |
@@ -381,34 +382,78 @@ the older code).
 
 ---
 
-## 13. Appendix: import staging data (optional)
+## 13. Moving staging data to prod
 
-Prod starts with an **empty database** (recommended). If you want your staging data —
-campaigns, leads, your user account — moved over instead:
+The dump **replaces** prod tables (it contains `DROP TABLE` + `CREATE TABLE` for all 7) —
+it is a clone, not a merge. The `users` table comes across too, so **after the import you
+log in with your STAGING password**; accounts registered only on prod stop existing.
 
-**Important:** reuse the **same `ENCRYPTION_KEY`** value in prod's `.prod.env` as staging
-uses, *before* the first prod deploy. Anything the app encrypted under staging's key is
-unreadable under a different one.
+### 13.1 Align the keys (once, before importing)
 
-1. Dump on the staging VM:
+If staging ever encrypted anything, prod must use staging's `SECRET_KEY` / `ENCRYPTION_KEY`.
+On a fresh prod the only cost of switching is a re-login (JWTs are re-signed).
 
 ```bash
-docker exec smart-reach-ai-staging-db-1 sh -c \
+# on the staging VM - copy these two values:
+grep -E '^(SECRET_KEY|ENCRYPTION_KEY)=' /opt/smart-reach-ai-staging/.staging.env
+# put the same values into /opt/smart-reach-ai-prod/.prod.env, then on the EC2:
+cd ~/actions-runner/_work/smart-reach-ai/smart-reach-ai
+docker compose -f docker-compose.prod.yml up -d    # re-injects the env
+```
+
+### 13.2 Snapshot current prod (your undo point)
+
+```bash
+sudo mkdir -p /opt/backups
+docker exec smart-reach-ai-prod-db-1 sh -c \
   'exec mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" --single-transaction leadgen_db' \
-  > srcai-staging-dump.sql
+  | gzip > /opt/backups/pre-import_$(date +%F_%H%M).sql.gz
 ```
 
-2. Copy `srcai-staging-dump.sql` to the EC2 (scp/rsync), then load **into a fresh prod
-   volume, before the first deploy** (or after `docker compose down` + volume delete if
-   re-doing):
+### 13.3 Dump staging and transfer
 
 ```bash
-docker exec -i smart-reach-ai-prod-db-1 sh -c \
-  'exec mysql -uroot -p"$MYSQL_ROOT_PASSWORD" leadgen_db' < srcai-staging-dump.sql
+# on the staging VM (only reachable from the hypervisor host).
+# Dump as the APP user, not root: the volume keeps the root password it was
+# INITIALIZED with, which can drift from .staging.env (the image only applies
+# MYSQL_ROOT_PASSWORD on an empty volume). The app user's creds are proven
+# working on every deploy - the db healthcheck authenticates with them.
+docker exec smart-reach-ai-staging-db-1 sh -c \
+  'exec mysqldump -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" --single-transaction leadgen_db' \
+  > srcai-staging-dump.sql
+# copy staging VM -> your admin machine -> EC2:
+scp <staging-vm>:~/srcai-staging-dump.sql .
+scp srcai-staging-dump.sql <ec2>:~/
 ```
 
-3. `docker compose -f docker-compose.prod.yml up -d` (or re-run the workflow) and verify:
-   login works, campaigns/leads are present.
+### 13.4 Import on the EC2
 
-MariaDB 10.1 → MySQL 8.0 dumps load cleanly here (the schema is engine-agnostic and both
-sides were generated/verified from the same ORM metadata — see database/README.md).
+```bash
+cd ~/actions-runner/_work/smart-reach-ai/smart-reach-ai
+# pause the writers (frontend stays up; api is down for the duration of the import):
+docker compose -f docker-compose.prod.yml stop backend worker scheduler
+# load:
+docker exec -i smart-reach-ai-prod-db-1 sh -c \
+  'exec mysql -uroot -p"$MYSQL_ROOT_PASSWORD" leadgen_db' < ~/srcai-staging-dump.sql
+# clear stale redis progress/celery state so imported campaigns start clean:
+docker exec smart-reach-ai-prod-redis-1 redis-cli -p 6381 FLUSHALL
+# back up:
+docker compose -f docker-compose.prod.yml up -d
+```
+
+### 13.5 Verify
+
+```sql
+SELECT 'campaigns' t, COUNT(*) n FROM campaigns
+UNION ALL SELECT 'leads', COUNT(*) FROM leads
+UNION ALL SELECT 'research_results', COUNT(*) FROM research_results
+UNION ALL SELECT 'users', COUNT(*) FROM users;
+```
+
+- Counts match staging; log in at `https://reachpulse.medidatalab.com` with your **staging
+  password**.
+- Admin flag missing? `docker exec -it smart-reach-ai-prod-backend-1 python promote_admin.py <email>`
+- Staging keeps running unchanged — from this moment the two datasets diverge.
+
+MariaDB 10.1 → MySQL 8.0 dumps load cleanly (schema is engine-agnostic; generated and
+verified from the same ORM metadata — see database/README.md).
