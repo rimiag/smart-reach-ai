@@ -65,6 +65,10 @@ class Reply(Base):
     # 191 chars: unique index stays under MariaDB's 767-byte key limit (utf8mb4).
     in_reply_to: Mapped[Optional[str]] = mapped_column(String(191), nullable=True, unique=True)
 
+    # The reply's OWN Message-ID (captured at ingest) so the mailbox can thread
+    # an answer to this reply with proper In-Reply-To headers.
+    message_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
     received_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(

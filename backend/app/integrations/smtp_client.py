@@ -61,9 +61,15 @@ class SMTPClient:
         subject: str,
         body: str,
         reply_to: str = "",
+        in_reply_to: str = "",
     ) -> SentMessage:
         """
         Send one plain-text email.
+
+        Args:
+            in_reply_to: Message-ID this message answers. Sets In-Reply-To and
+                References so mail clients thread it into the original
+                conversation (used by the mailbox reply feature).
 
         Raises:
             SMTPSendError: On any SMTP failure (connection, auth, rejection).
@@ -79,6 +85,9 @@ class SMTPClient:
         message["Subject"] = subject
         if reply_to:
             message["Reply-To"] = reply_to
+        if in_reply_to:
+            message["In-Reply-To"] = in_reply_to
+            message["References"] = in_reply_to
         message["Message-ID"] = make_msgid(domain=from_addr.split("@")[-1])
         message.attach(MIMEText(body, "plain", "utf-8"))
 

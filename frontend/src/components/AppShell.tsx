@@ -43,7 +43,7 @@ const NAV_ITEMS = [
     ),
   },
   {
-    label: 'Replies',
+    label: 'Mailbox',
     href: '/replies',
     icon: (
       <path

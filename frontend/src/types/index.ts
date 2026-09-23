@@ -199,6 +199,44 @@ export interface ReplyItem {
   created_at?: string;
 }
 
+// -----------------------------------------------------------------------------
+// Mailbox Types
+// -----------------------------------------------------------------------------
+export interface MailboxThread {
+  lead_id: number;
+  campaign_id: number;
+  campaign_name?: string;
+  lead_name?: string;
+  email?: string;
+  last_direction: 'in' | 'out' | null;
+  last_subject?: string;
+  last_preview: string;
+  last_at?: string;
+  unread_count: number;
+  total_count: number;
+}
+
+export interface MailboxMessage {
+  direction: 'in' | 'out';
+  subject?: string;
+  body: string;
+  from_email: string;
+  to_email?: string;
+  at?: string;
+  status?: string;
+  category?: string;
+  ai_summary?: string;
+}
+
+export interface MailboxThreadDetail {
+  lead_id: number;
+  lead_name?: string;
+  email?: string;
+  campaign_id: number;
+  campaign_name?: string;
+  messages: MailboxMessage[];
+}
+
 export interface ReplyAnalytics {
   total_replies: number;
   unread_replies: number;
