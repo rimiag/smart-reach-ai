@@ -11,6 +11,7 @@ import logging
 import re
 from dataclasses import dataclass
 
+from app.core.usage_tracking import bump_api_usage
 from app.integrations.ai_base import LLMClient, get_ai_client
 from app.services.personalization_service import personalization_service
 
@@ -134,6 +135,7 @@ class EmailGenerationAgent:
             temperature=0.7,  # writing benefits from variety
             model=self.client.default_email_model,
         )
+        await bump_api_usage(self.client.name)
 
         result = parse_email(response.text)
         logger.info(
@@ -172,6 +174,7 @@ class EmailGenerationAgent:
             temperature=0.7,
             model=self.client.default_email_model,
         )
+        await bump_api_usage(self.client.name)
 
         result = parse_email(response.text)
         logger.info(

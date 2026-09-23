@@ -114,3 +114,34 @@ class SystemStatus(BaseModel):
     celery_workers: List[str]
     # Key/config presence flags only - never values.
     integrations: dict[str, bool]
+
+
+# -----------------------------------------------------------------------------
+# API usage (admin dashboard)
+# -----------------------------------------------------------------------------
+class ApiUsageInfo(BaseModel):
+    """Usage snapshot for one external API provider."""
+
+    configured: bool
+    used: Optional[int] = None
+    limit: Optional[int] = None
+    remaining: Optional[int] = None
+    # "live" = provider's own account endpoint, "counter" = our tracking table
+    source: str = "counter"
+    error: Optional[str] = None
+
+
+class EmailUsageInfo(BaseModel):
+    """Outreach email volume for the current month."""
+
+    configured: bool
+    sent_this_month: int
+    failed_this_month: int
+
+
+class ApiUsageResponse(BaseModel):
+    """Admin API-usage dashboard payload."""
+
+    serpapi: ApiUsageInfo
+    gemini: ApiUsageInfo
+    email: EmailUsageInfo

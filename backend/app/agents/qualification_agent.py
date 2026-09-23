@@ -16,6 +16,7 @@ import re
 from dataclasses import dataclass, field
 from typing import List, Optional
 
+from app.core.usage_tracking import bump_api_usage
 from app.integrations.ai_base import LLMClient, get_ai_client
 
 logger = logging.getLogger(__name__)
@@ -127,6 +128,7 @@ class QualificationAgent:
             max_tokens=512,
             temperature=0.2,  # scoring benefits from low variance
         )
+        await bump_api_usage(self.client.name)
 
         result = parse_qualification(response.text)
         result.signals = signals

@@ -6,8 +6,9 @@ import { AuthProvider } from '@/hooks/useAuth';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'AI Lead Generation Platform',
-  description: 'AI-powered lead generation and outreach platform',
+  title: 'ReachPulse — AI Lead Generation & Outreach | Smart Reach AI',
+  description:
+    'ReachPulse by Smart Reach AI discovers websites that match your ideal customer, qualifies them with AI, and sends personalized outreach you approve before it ships.',
 };
 
 export default function RootLayout({

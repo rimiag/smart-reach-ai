@@ -3,12 +3,16 @@
 import { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import Link from 'next/link';
+import { api } from '@/lib/api';
 
 export default function LoginPage() {
   const { login, isLoading } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [unverified, setUnverified] = useState(false);
+  const [resent, setResent] = useState(false);
+  const [resendError, setResendError] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,7 +28,22 @@ export default function LoginPage() {
     } catch (err: unknown) {
       const axiosError = err as { response?: { data?: { error?: { message?: string } } } };
       const message = axiosError.response?.data?.error?.message || 'Login failed';
+      // The backend returns 403 with this message until the account's email is confirmed
+      if (message.toLowerCase().includes('not verified')) {
+        setUnverified(true);
+      }
       setError(message);
+    }
+  };
+
+  const handleResend = async () => {
+    setResent(false);
+    setResendError('');
+    try {
+      await api.resendVerification(email);
+      setResent(true);
+    } catch {
+      setResendError('Could not resend right now - please try again in a minute.');
     }
   };
 
@@ -46,8 +65,37 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-6">
             {error && (
-              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 px-4 py-3 rounded-md">
-                {error}
+              <div
+                className={`px-4 py-3 rounded-md border text-sm ${
+                  unverified
+                    ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800 text-amber-600 dark:text-amber-400'
+                    : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-600 dark:text-red-400'
+                }`}
+              >
+                {unverified
+                  ? 'Please verify your email first - check your inbox for the confirmation link.'
+                  : error}
+              </div>
+            )}
+
+            {unverified && (
+              <div className="text-sm">
+                {resent ? (
+                  <p className="text-green-600 dark:text-green-400">
+                    Verification email sent again - check your inbox.
+                  </p>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleResend}
+                    className="text-blue-600 hover:text-blue-700 font-medium"
+                  >
+                    Resend verification email
+                  </button>
+                )}
+                {resendError && (
+                  <p className="mt-2 text-red-600 dark:text-red-400">{resendError}</p>
+                )}
               </div>
             )}
 

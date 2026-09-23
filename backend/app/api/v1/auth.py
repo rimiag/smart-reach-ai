@@ -4,13 +4,16 @@ Authentication API Endpoints
 Handles user registration, login, token refresh, and user profile.
 """
 
-from datetime import datetime
+import logging
+import secrets
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -20,6 +23,7 @@ from app.core.security import (
 from app.db.base import get_db
 from app.models.user import User
 from app.schemas.user import (
+    ResendVerificationRequest,
     TokenRefreshRequest,
     TokenResponse,
     UserCreate,
@@ -27,10 +31,60 @@ from app.schemas.user import (
     UserResponse,
     UserUpdate,
     UserUpdatePassword,
+    VerifyEmailRequest,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 security = HTTPBearer()
+
+VERIFICATION_TOKEN_TTL_HOURS = 24
+VERIFICATION_RESEND_COOLDOWN_SECONDS = 60
+
+
+def _verification_email_body(user: User, token: str) -> str:
+    """Plain-text welcome / email-confirmation message."""
+    link = f"{settings.frontend_url}/verify?token={token}"
+    name = user.name or user.email.split("@")[0]
+    return (
+        f"Hi {name},\n\n"
+        "Welcome to ReachPulse by Smart Reach AI!\n\n"
+        "Please confirm your email address to activate your account:\n\n"
+        f"{link}\n\n"
+        "This link expires in 24 hours. If you didn't create an account, "
+        "you can safely ignore this email.\n\n"
+        "- The ReachPulse Team"
+    )
+
+
+async def _send_verification_email(user: User, token: str) -> bool:
+    """
+    Send the verification email. Returns True when sent.
+
+    Fail-open policy: when SMTP is not configured (laptop dev) or the send
+    fails, the caller auto-verifies the user so signup never dead-ends.
+    """
+    from app.integrations.smtp_client import SMTPSendError, smtp_client
+
+    if not smtp_client.is_configured:
+        logger.warning(
+            "SMTP not configured - auto-verifying %s without sending email", user.email
+        )
+        return False
+
+    try:
+        await smtp_client.send(
+            from_addr=settings.smtp_from_email or settings.smtp_user,
+            from_name="ReachPulse",
+            to_addr=user.email,
+            subject="Confirm your email - ReachPulse",
+            body=_verification_email_body(user, token),
+        )
+        return True
+    except SMTPSendError as exc:
+        logger.error("Verification email to %s failed: %s", user.email, exc)
+        return False
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -51,16 +105,30 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
                 detail="Email already registered",
             )
 
-        # Create new user
+        # Create new user - unverified until the email link is clicked
+        token = secrets.token_urlsafe(32)
         new_user = User(
             email=user_data.email,
             password_hash=get_password_hash(user_data.password),
             name=user_data.name,
+            is_verified=False,
+            verification_token=token,
+            verification_token_expires=datetime.now(timezone.utc)
+            + timedelta(hours=VERIFICATION_TOKEN_TTL_HOURS),
         )
 
         db.add(new_user)
         await db.commit()
         await db.refresh(new_user)
+
+        # Send the confirmation email. If it cannot be delivered (SMTP not
+        # configured, or the send failed), auto-verify so the account is
+        # never unreachable - the user must be able to sign in.
+        if not await _send_verification_email(new_user, token):
+            new_user.is_verified = True
+            new_user.verification_token = None
+            new_user.verification_token_expires = None
+            await db.commit()
 
         return UserResponse.model_validate(new_user)
 
@@ -102,9 +170,14 @@ async def login(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
                 detail="Invalid email or password",
             )
 
-        # Update last login
-        from datetime import timezone
+        # Block unverified accounts until they confirm their email
+        if not user.is_verified:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Email not verified. Please check your inbox for the confirmation link.",
+            )
 
+        # Update last login
         user.last_login = datetime.now(timezone.utc)
         await db.commit()
 
@@ -185,6 +258,12 @@ async def refresh_token(token_data: TokenRefreshRequest, db: AsyncSession = Depe
             detail="User not found or inactive",
         )
 
+    if not user.is_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Email not verified. Please check your inbox for the confirmation link.",
+        )
+
     # Create new tokens
     access_token = create_access_token(data={"sub": str(user.id)})
     new_refresh_token = create_refresh_token(data={"sub": str(user.id)})
@@ -251,3 +330,80 @@ async def update_current_user(
     await db.refresh(user)
 
     return UserResponse.model_validate(user)
+
+
+@router.post("/verify")
+async def verify_email(payload: VerifyEmailRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Confirm an account via the token from the verification email.
+
+    Marks the account verified and clears the token. Invalid or expired
+    tokens return 400 with a user-friendly message.
+    """
+    result = await db.execute(select(User).where(User.verification_token == payload.token))
+    user = result.scalar_one_or_none()
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid verification link.",
+        )
+
+    expires = user.verification_token_expires
+    expired = expires is None or expires.replace(tzinfo=timezone.utc) < datetime.now(
+        timezone.utc
+    )
+    if expired:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This verification link has expired. Request a new email from the sign-in page.",
+        )
+
+    user.is_verified = True
+    user.verification_token = None
+    user.verification_token_expires = None
+    await db.commit()
+
+    logger.info("Email verified for user %d", user.id)
+    return {"message": "Email verified. You can now sign in."}
+
+
+@router.post("/resend-verification")
+async def resend_verification(
+    payload: ResendVerificationRequest, db: AsyncSession = Depends(get_db)
+):
+    """
+    Re-send the verification email.
+
+    Always returns 200 - the response never reveals whether the address has
+    an account. Throttled to one email per minute per address (a still-fresh
+    token is reused as-is and no new email goes out inside the cooldown).
+    """
+    result = await db.execute(select(User).where(User.email == payload.email))
+    user = result.scalar_one_or_none()
+
+    if user and not user.is_verified:
+        now = datetime.now(timezone.utc)
+        expires = user.verification_token_expires
+        minted_at = (
+            expires.replace(tzinfo=timezone.utc) - timedelta(hours=VERIFICATION_TOKEN_TTL_HOURS)
+            if expires is not None
+            else None
+        )
+
+        if (
+            not user.verification_token
+            or minted_at is None
+            or now - minted_at >= timedelta(seconds=VERIFICATION_RESEND_COOLDOWN_SECONDS)
+        ):
+            token = secrets.token_urlsafe(32)
+            user.verification_token = token
+            user.verification_token_expires = now + timedelta(
+                hours=VERIFICATION_TOKEN_TTL_HOURS
+            )
+            await db.commit()
+            await _send_verification_email(user, token)
+
+    return {
+        "message": "If that address needs verification, a new email has been sent."
+    }

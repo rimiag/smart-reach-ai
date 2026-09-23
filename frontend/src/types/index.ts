@@ -11,6 +11,7 @@ export interface User {
   name?: string;
   role: 'admin' | 'user';
   is_active: boolean;
+  is_verified?: boolean;
   created_at: string;
   last_login?: string;
   plan?: string;
@@ -21,6 +22,28 @@ export interface UserWithToken extends User {
   access_token: string;
   refresh_token: string;
   token_type: string;
+}
+
+// -----------------------------------------------------------------------------
+// API Usage Types (admin)
+// -----------------------------------------------------------------------------
+export interface ApiUsageInfo {
+  configured: boolean;
+  used: number | null;
+  limit: number | null;
+  remaining: number | null;
+  source: 'live' | 'counter';
+  error: string | null;
+}
+
+export interface ApiUsage {
+  serpapi: ApiUsageInfo;
+  gemini: ApiUsageInfo;
+  email: {
+    configured: boolean;
+    sent_this_month: number;
+    failed_this_month: number;
+  };
 }
 
 // -----------------------------------------------------------------------------

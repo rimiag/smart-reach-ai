@@ -73,11 +73,11 @@ apiClient.interceptors.response.use(
 
         return apiClient(originalRequest);
       } catch (refreshError) {
-        // Refresh failed, redirect to login
+        // Refresh failed - send the user to the landing page (anon view)
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
         if (typeof window !== 'undefined') {
-          window.location.href = '/login';
+          window.location.href = '/';
         }
         return Promise.reject(refreshError);
       }
@@ -100,6 +100,11 @@ export const api = {
   login: (data: { email: string; password: string }) =>
     apiClient.post('/auth/login', data),
   logout: () => apiClient.post('/auth/logout'),
+
+  // Email verification
+  verifyEmail: (token: string) => apiClient.post('/auth/verify', { token }),
+  resendVerification: (email: string) =>
+    apiClient.post('/auth/resend-verification', { email }),
   getCurrentUser: () => apiClient.get('/auth/me'),
 
   // Campaigns
@@ -208,6 +213,7 @@ export const api = {
   ) => apiClient.patch(`/admin/users/${id}`, data),
   deleteAdminUser: (id: number) => apiClient.delete(`/admin/users/${id}`),
   getAdminSystem: () => apiClient.get('/admin/system'),
+  getApiUsage: () => apiClient.get('/admin/api-usage'),
 };
 
 export default apiClient;

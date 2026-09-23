@@ -7,7 +7,8 @@ mutating routes additionally receive the admin for guard checks.
 """
 
 import logging
-from datetime import datetime, timedelta
+import time
+from datetime import datetime, timedelta, timezone
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -18,6 +19,7 @@ from app.core.config import settings
 from app.core.security import get_password_hash
 from app.db.base import get_db
 from app.dependencies import get_current_admin
+from app.models.api_usage import ApiUsageCounter
 from app.models.campaign import Campaign
 from app.models.email_log import EmailLog
 from app.models.lead import Lead
@@ -29,7 +31,10 @@ from app.schemas.admin import (
     AdminUserCreate,
     AdminUsersResponse,
     AdminUserUpdate,
+    ApiUsageInfo,
+    ApiUsageResponse,
     DayCount,
+    EmailUsageInfo,
     OverviewStats,
     RecentSignup,
     SystemStatus,
@@ -348,3 +353,105 @@ async def get_system_status(db: DBSession):
         celery_workers=celery_workers,
         integrations=integrations,
     )
+
+
+# -----------------------------------------------------------------------------
+# API usage (SerpAPI / Gemini / email) - admin usage dashboard
+# -----------------------------------------------------------------------------
+SERPAPI_CACHE_TTL_SECONDS = 300
+_serpapi_cache: dict = {"data": None, "fetched_at": 0.0}
+
+
+async def _counter_count(db: DBSession, provider: str) -> int:
+    """Current-month request count from our own api_usage_counters table."""
+    period = datetime.now(timezone.utc).strftime("%Y-%m")
+    result = await db.execute(
+        select(ApiUsageCounter.count).where(
+            ApiUsageCounter.provider == provider,
+            ApiUsageCounter.period == period,
+        )
+    )
+    return result.scalar() or 0
+
+
+async def _serpapi_usage(db: DBSession) -> ApiUsageInfo:
+    """
+    Live usage from SerpApi's account endpoint (free, not a billed search),
+    cached 5 minutes. Falls back to our own counters when unreachable.
+    """
+    now = time.monotonic()
+    cached = _serpapi_cache["data"]
+    if (
+        cached is not None
+        and now - _serpapi_cache["fetched_at"] < SERPAPI_CACHE_TTL_SECONDS
+    ):
+        return cached
+
+    if not settings.serpapi_key:
+        info = ApiUsageInfo(configured=False, source="live")
+    else:
+        try:
+            import httpx
+
+            async with httpx.AsyncClient(timeout=8) as client:
+                resp = await client.get(
+                    "https://serpapi.com/account",
+                    params={"api_key": settings.serpapi_key},
+                )
+                resp.raise_for_status()
+                account = resp.json()
+            used = account.get("this_month_usage")
+            remaining = account.get("total_searches_left")
+            info = ApiUsageInfo(
+                configured=True,
+                used=used if isinstance(used, int) else None,
+                remaining=remaining if isinstance(remaining, int) else None,
+                limit=(
+                    used + remaining
+                    if isinstance(used, int) and isinstance(remaining, int)
+                    else None
+                ),
+                source="live",
+            )
+        except Exception as exc:
+            info = ApiUsageInfo(
+                configured=True,
+                used=await _counter_count(db, "serpapi"),
+                source="counter",
+                error=f"live fetch failed ({str(exc)[:80]})",
+            )
+
+    _serpapi_cache.update(data=info, fetched_at=now)
+    return info
+
+
+@router.get("/api-usage", response_model=ApiUsageResponse)
+async def get_api_usage(db: DBSession):
+    """
+    Monthly API usage per provider for the admin dashboard.
+
+    SerpAPI: live from SerpApi's account endpoint (5-min cache, counter
+    fallback). Gemini: our own request counters (limit optional). Email:
+    sent/failed counts from the emails table for this month.
+    """
+    serpapi = await _serpapi_usage(db)
+
+    gemini = ApiUsageInfo(
+        configured=bool(settings.gemini_api_key),
+        used=await _counter_count(db, "gemini"),
+        limit=settings.gemini_monthly_limit or None,
+        source="counter",
+    )
+
+    month_start = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    email = EmailUsageInfo(
+        configured=bool(settings.smtp_host and settings.smtp_user),
+        sent_this_month=await _count(
+            db, EmailLog, EmailLog.status == "sent", EmailLog.created_at >= month_start
+        ),
+        failed_this_month=await _count(
+            db, EmailLog, EmailLog.status == "failed", EmailLog.created_at >= month_start
+        ),
+    )
+
+    return ApiUsageResponse(serpapi=serpapi, gemini=gemini, email=email)

@@ -153,6 +153,13 @@ class Settings(BaseSettings):
     gemini_model: str = Field(
         default="gemini-3.6-flash", description="Gemini model (free tier friendly)"
     )
+    gemini_monthly_limit: int = Field(
+        default=0,
+        description=(
+            "Advertised monthly Gemini request limit for the admin usage card "
+            "(0 = unknown - show count only, no progress bar)"
+        ),
+    )
 
     # -----------------------------------------------------------------------------
     # AI Providers - selection & behaviour (Phase 2)

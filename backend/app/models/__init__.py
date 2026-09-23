@@ -1,5 +1,6 @@
 """Database models - ORM definitions."""
 
+from app.models.api_usage import ApiUsageCounter
 from app.models.campaign import Campaign
 from app.models.email_log import EmailLog
 from app.models.lead import Lead
@@ -8,4 +9,13 @@ from app.models.research_result import ResearchResult
 from app.models.suppression import Suppression
 from app.models.user import User
 
-__all__ = ["User", "Campaign", "Lead", "ResearchResult", "EmailLog", "Suppression", "Reply"]
+__all__ = [
+    "User",
+    "Campaign",
+    "Lead",
+    "ResearchResult",
+    "EmailLog",
+    "Suppression",
+    "Reply",
+    "ApiUsageCounter",
+]
