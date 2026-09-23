@@ -12,12 +12,12 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.base import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, hold_guard
 from app.integrations.ai_base import AIProviderError
 from app.schemas.user import UserResponse
 from app.services.assistant_service import assistant_service
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(hold_guard)])
 
 
 class AskRequest(BaseModel):

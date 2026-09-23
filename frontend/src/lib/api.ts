@@ -209,6 +209,7 @@ export const api = {
       plan: string;
       billing_status: string;
       billing_notes: string;
+      account_status: string;
     }>
   ) => apiClient.patch(`/admin/users/${id}`, data),
   deleteAdminUser: (id: number) => apiClient.delete(`/admin/users/${id}`),

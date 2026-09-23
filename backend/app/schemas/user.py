@@ -73,6 +73,9 @@ class UserResponse(UserBase):
     # not received the 006 billing columns yet.
     plan: str = "free"
     billing_status: str = "active"
+    # "hold" = new signup awaiting admin approval (read-only). Default keeps
+    # auth flows working before the column exists.
+    account_status: str = "active"
 
     model_config = {"from_attributes": True}
 

@@ -14,7 +14,7 @@ from app.agents.email_agent import EmailGenerationAgent, EmailParseError
 from app.agents.qualification_agent import QualificationAgent, QualificationParseError
 from app.core.config import settings
 from app.db.base import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, hold_guard
 from app.integrations.ai_base import AIProviderError
 from app.models.lead import Lead
 from app.schemas.common import BulkActionRequest, PaginatedResponse
@@ -34,7 +34,7 @@ from app.services.export_service import export_service
 from app.services.lead_service import lead_service
 from app.services.template_service import template_service
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(hold_guard)])
 
 
 @router.get("", response_model=PaginatedResponse[LeadResponse])

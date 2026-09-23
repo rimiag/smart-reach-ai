@@ -21,6 +21,8 @@ const STATUS_STYLES: Record<string, string> = {
   active: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
   paused: 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300',
   completed: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300',
+  // account access (admin users table)
+  hold: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
 };
 
 interface StatusBadgeProps {

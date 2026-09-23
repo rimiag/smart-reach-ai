@@ -33,6 +33,9 @@ class AdminListItem(BaseModel):
     billing_status: str = "active"
     billing_notes: Optional[str] = None
 
+    # "hold" = signup awaiting admin approval
+    account_status: str = "active"
+
     # Usage (computed from owned records)
     campaigns_count: int = 0
     leads_count: int = 0
@@ -71,6 +74,7 @@ class AdminUserUpdate(BaseModel):
     plan: Optional[str] = Field(None, max_length=50)
     billing_status: Optional[str] = Field(None, max_length=50)
     billing_notes: Optional[str] = None
+    account_status: Optional[str] = Field(None, max_length=50)
 
 
 # -----------------------------------------------------------------------------

@@ -12,6 +12,8 @@ export interface User {
   role: 'admin' | 'user';
   is_active: boolean;
   is_verified?: boolean;
+  /** "hold" = new signup awaiting admin approval (read-only) */
+  account_status?: 'hold' | 'active';
   created_at: string;
   last_login?: string;
   plan?: string;
@@ -60,6 +62,7 @@ export interface AdminUser {
   plan: string;
   billing_status: string;
   billing_notes?: string;
+  account_status: 'hold' | 'active';
   campaigns_count: number;
   leads_count: number;
   emails_count: number;
