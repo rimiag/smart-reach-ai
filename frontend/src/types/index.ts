@@ -12,6 +12,8 @@ export interface User {
   role: 'admin' | 'user';
   is_active: boolean;
   is_verified?: boolean;
+  /** "hold" = new signup awaiting admin approval (read-only) */
+  account_status?: 'hold' | 'active';
   created_at: string;
   last_login?: string;
   plan?: string;
@@ -60,6 +62,7 @@ export interface AdminUser {
   plan: string;
   billing_status: string;
   billing_notes?: string;
+  account_status: 'hold' | 'active';
   campaigns_count: number;
   leads_count: number;
   emails_count: number;
@@ -194,6 +197,44 @@ export interface ReplyItem {
   status: 'unread' | 'read';
   received_at?: string;
   created_at?: string;
+}
+
+// -----------------------------------------------------------------------------
+// Mailbox Types
+// -----------------------------------------------------------------------------
+export interface MailboxThread {
+  lead_id: number;
+  campaign_id: number;
+  campaign_name?: string;
+  lead_name?: string;
+  email?: string;
+  last_direction: 'in' | 'out' | null;
+  last_subject?: string;
+  last_preview: string;
+  last_at?: string;
+  unread_count: number;
+  total_count: number;
+}
+
+export interface MailboxMessage {
+  direction: 'in' | 'out';
+  subject?: string;
+  body: string;
+  from_email: string;
+  to_email?: string;
+  at?: string;
+  status?: string;
+  category?: string;
+  ai_summary?: string;
+}
+
+export interface MailboxThreadDetail {
+  lead_id: number;
+  lead_name?: string;
+  email?: string;
+  campaign_id: number;
+  campaign_name?: string;
+  messages: MailboxMessage[];
 }
 
 export interface ReplyAnalytics {

@@ -34,6 +34,7 @@ class RawReply:
     subject: str
     body: str
     in_reply_to: str
+    message_id: str
     received_at: Optional[datetime]
 
 
@@ -152,6 +153,7 @@ class ImapClient:
                             subject=_decode(message.get("Subject", "")),
                             body=_extract_body(message),
                             in_reply_to=in_reply_to,
+                            message_id=_decode(message.get("Message-ID", "")),
                             received_at=(
                                 received_at.replace(tzinfo=None)
                                 if received_at and received_at.tzinfo

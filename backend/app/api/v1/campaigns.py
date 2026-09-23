@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.search_agent import SearchAgent
 from app.db.base import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, hold_guard
 from app.integrations.ai_base import AIProviderError, get_ai_client
 from app.integrations.search_base import SearchProviderError
 from app.integrations.smtp_client import smtp_client
@@ -39,7 +39,7 @@ from app.tasks.search_tasks import run_campaign_search, run_campaign_search_asyn
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(hold_guard)])
 
 # Keep references to in-process research tasks so they are not garbage
 # collected mid-run (laptop-dev fallback when no Redis broker is available).

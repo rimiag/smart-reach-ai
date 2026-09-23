@@ -147,6 +147,7 @@ class ReplyMonitor:
                                 None if classification.used_ai else "classified without AI"
                             ),
                             in_reply_to=in_reply_to or None,
+                            message_id=(raw.message_id or None),
                             received_at=raw.received_at,
                         )
                     )

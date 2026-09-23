@@ -12,18 +12,18 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.base import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, hold_guard, require_active_account
 from app.models.reply import Reply
 from app.schemas.common import PaginatedResponse
 from app.schemas.user import UserResponse
 from app.services.reply_monitor import run_reply_check_async
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(hold_guard)])
 
 
 @router.get("/check")
 async def trigger_reply_check(
-    current_user: Annotated[UserResponse, Depends(get_current_user)],
+    current_user: Annotated[UserResponse, Depends(require_active_account)],
 ):
     """
     Poll the mailbox now and ingest new replies (same as the periodic beat

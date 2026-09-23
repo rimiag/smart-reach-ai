@@ -74,5 +74,13 @@ class User(Base):
     )
     billing_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
+    # Account access: "hold" = can browse but no consuming actions (campaigns,
+    # research, AI, sending) until an admin releases them. server_default keeps
+    # EXISTING users active when ensure_schema adds the column; only the
+    # register endpoint creates rows with account_status="hold" explicitly.
+    account_status: Mapped[str] = mapped_column(
+        String(50), default="active", server_default="active", nullable=False
+    )
+
     def __repr__(self) -> str:
         return f"<User(id={self.id}, email={self.email}, role={self.role})>"

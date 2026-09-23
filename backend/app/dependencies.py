@@ -6,7 +6,7 @@ Reusable dependency functions for authentication, database sessions, etc.
 
 from typing import Annotated, Optional
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -122,6 +122,50 @@ async def get_current_admin(
             detail="Not enough permissions",
         )
     return current_user
+
+
+# -----------------------------------------------------------------------------
+# Account hold (new signups wait for admin approval before consuming resources)
+# -----------------------------------------------------------------------------
+HOLD_MESSAGE = (
+    "Your account is on hold. An administrator must approve your account "
+    "before you can do this."
+)
+
+
+def _raise_if_held(user: UserResponse) -> None:
+    if getattr(user, "account_status", "active") == "hold":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=HOLD_MESSAGE,
+        )
+
+
+async def require_active_account(
+    current_user: Annotated[UserResponse, Depends(get_current_user)],
+) -> UserResponse:
+    """
+    Block resource-consuming endpoints for held accounts.
+
+    Use directly on endpoints whose HTTP verb alone doesn't reveal cost
+    (e.g. GET /replies/check triggers an IMAP poll).
+    """
+    _raise_if_held(current_user)
+    return current_user
+
+
+async def hold_guard(
+    request: Request,
+    current_user: Annotated[UserResponse, Depends(get_current_user)],
+) -> None:
+    """
+    Router-level guard: held accounts may GET (read-only browsing) but every
+    write method is rejected. Applied via APIRouter(dependencies=...) so all
+    endpoints in the router inherit the policy - including ones added later.
+    """
+    if request.method in ("GET", "HEAD", "OPTIONS"):
+        return
+    _raise_if_held(current_user)
 
 
 # -----------------------------------------------------------------------------

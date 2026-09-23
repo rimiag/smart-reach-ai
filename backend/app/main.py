@@ -23,6 +23,7 @@ from app.api.v1 import (
     campaigns,
     emails,
     leads,
+    mailbox,
     replies,
     suppression,
     unsubscribe,
@@ -144,6 +145,7 @@ app.include_router(emails.router, prefix=f"{api_prefix}/emails", tags=["Emails"]
 app.include_router(suppression.router, prefix=f"{api_prefix}/suppression", tags=["Suppression"])
 app.include_router(unsubscribe.router, prefix=f"{api_prefix}/unsubscribe", tags=["Unsubscribe"])
 app.include_router(replies.router, prefix=f"{api_prefix}/replies", tags=["Replies"])
+app.include_router(mailbox.router, prefix=f"{api_prefix}/mailbox", tags=["Mailbox"])
 app.include_router(webhooks.router, prefix=f"{api_prefix}/webhooks", tags=["Webhooks"])
 app.include_router(assistant.router, prefix=f"{api_prefix}/assistant", tags=["Assistant"])
 app.include_router(analytics.router, prefix=f"{api_prefix}/analytics", tags=["Analytics"])

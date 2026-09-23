@@ -105,13 +105,15 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
                 detail="Email already registered",
             )
 
-        # Create new user - unverified until the email link is clicked
+        # Create new user - unverified until the email link is clicked, and on
+        # hold until an admin releases them (read-only until then)
         token = secrets.token_urlsafe(32)
         new_user = User(
             email=user_data.email,
             password_hash=get_password_hash(user_data.password),
             name=user_data.name,
             is_verified=False,
+            account_status="hold",
             verification_token=token,
             verification_token_expires=datetime.now(timezone.utc)
             + timedelta(hours=VERIFICATION_TOKEN_TTL_HOURS),

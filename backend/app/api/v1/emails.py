@@ -13,13 +13,13 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.base import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, hold_guard
 from app.models.email_log import EmailLog
 from app.schemas.common import PaginatedResponse
 from app.schemas.email import EmailLogResponse
 from app.schemas.user import UserResponse
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(hold_guard)])
 
 
 @router.get("", response_model=PaginatedResponse[EmailLogResponse])

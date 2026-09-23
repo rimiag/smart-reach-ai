@@ -187,6 +187,13 @@ export const api = {
   markReplyRead: (id: number) => apiClient.patch(`/replies/${id}/read`),
   checkReplies: () => apiClient.get('/replies/check'),
 
+  // Mailbox (threaded conversations + reply)
+  getMailboxThreads: (params?: Record<string, unknown>) =>
+    apiClient.get('/mailbox/threads', { params }),
+  getMailboxThread: (leadId: number) => apiClient.get(`/mailbox/threads/${leadId}`),
+  sendMailboxReply: (data: { lead_id: number; body: string; subject?: string }) =>
+    apiClient.post('/mailbox/reply', data),
+
   // Analytics
   getDashboardStats: () => apiClient.get('/analytics/dashboard'),
   getCampaignAnalytics: () => apiClient.get('/analytics/campaigns'),
@@ -209,6 +216,7 @@ export const api = {
       plan: string;
       billing_status: string;
       billing_notes: string;
+      account_status: string;
     }>
   ) => apiClient.patch(`/admin/users/${id}`, data),
   deleteAdminUser: (id: number) => apiClient.delete(`/admin/users/${id}`),

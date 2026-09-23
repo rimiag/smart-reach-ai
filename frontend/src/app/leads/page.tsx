@@ -43,8 +43,13 @@ function LeadsContent() {
       return;
     }
     try {
-      const response: LeadsResponse = (await api.getLeads({ campaign_id: campaignId, per_page: 100 }))
-        .data;
+      const response: LeadsResponse = (
+        await api.getLeads({
+          campaign_id: campaignId,
+          per_page: 100,
+          ...(statusFilter ? { status: statusFilter } : {}),
+        })
+      ).data;
       setLeads(response.items || []);
       setError('');
       try {
@@ -59,7 +64,7 @@ function LeadsContent() {
     } finally {
       setIsLoading(false);
     }
-  }, [campaignId, isAuthenticated]);
+  }, [campaignId, isAuthenticated, statusFilter]);
 
   useEffect(() => {
     fetchLeads();

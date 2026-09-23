@@ -18,6 +18,7 @@ interface EditForm {
   plan: string;
   billing_status: string;
   billing_notes: string;
+  account_status: 'hold' | 'active';
 }
 
 function toForm(u: AdminUser): EditForm {
@@ -29,6 +30,7 @@ function toForm(u: AdminUser): EditForm {
     plan: u.plan,
     billing_status: u.billing_status,
     billing_notes: u.billing_notes || '',
+    account_status: u.account_status ?? 'active',
   };
 }
 
@@ -107,6 +109,7 @@ export default function AdminUsersPage() {
       plan: editForm.plan,
       billing_status: editForm.billing_status,
       billing_notes: editForm.billing_notes || null,
+      account_status: editForm.account_status,
     };
     if (editForm.password) payload.password = editForm.password;
     try {
@@ -320,6 +323,19 @@ export default function AdminUsersPage() {
                             </select>
                           </div>
                           <div>
+                            <label className={labelCls}>Access</label>
+                            <select
+                              value={editForm.account_status}
+                              onChange={(e) =>
+                                setEditForm({ ...editForm, account_status: e.target.value as 'hold' | 'active' })
+                              }
+                              className={`${inputCls} mt-1 w-full`}
+                            >
+                              <option value="active">Active</option>
+                              <option value="hold">Hold</option>
+                            </select>
+                          </div>
+                          <div>
                             <label className={labelCls}>Billing status</label>
                             <select
                               value={editForm.billing_status}
@@ -383,7 +399,10 @@ export default function AdminUsersPage() {
                     </td>
                     <td className="px-4 py-2.5"><StatusBadge status={u.role} /></td>
                     <td className="px-4 py-2.5">
-                      <StatusBadge status={u.is_active ? 'active' : 'paused'} />
+                      <div className="flex items-center gap-1.5">
+                        <StatusBadge status={u.is_active ? 'active' : 'paused'} />
+                        {u.account_status === 'hold' && <StatusBadge status="hold" />}
+                      </div>
                     </td>
                     <td className="px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300">{u.plan}</td>
                     <td className="px-4 py-2.5"><StatusBadge status={u.billing_status} /></td>
@@ -453,7 +472,8 @@ export default function AdminUsersPage() {
 
       <p className="text-xs text-gray-400 dark:text-gray-500">
         Usage columns: Campaigns / Leads / Emails sent. Deleting a user permanently removes
-        all their data (cascade). Deactivating only blocks sign-in.
+        all their data (cascade). Deactivating blocks sign-in; Hold allows sign-in but
+        blocks all actions (new signups start on hold).
       </p>
     </div>
   );

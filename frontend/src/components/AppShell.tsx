@@ -43,7 +43,7 @@ const NAV_ITEMS = [
     ),
   },
   {
-    label: 'Replies',
+    label: 'Mailbox',
     href: '/replies',
     icon: (
       <path
@@ -96,7 +96,7 @@ const NAV_ITEMS = [
 
 export default function AppShell({ title, description, action, children, width = 'default' }: AppShellProps) {
   const pathname = usePathname();
-  const { user, logout, isAdmin } = useAuth();
+  const { user, logout, isAdmin, refreshUser } = useAuth();
   const [unreadReplies, setUnreadReplies] = useState(0);
 
   const navItems = NAV_ITEMS.filter((item) => !('adminOnly' in item && item.adminOnly) || isAdmin);
@@ -113,6 +113,15 @@ export default function AppShell({ title, description, action, children, width =
       cancelled = true;
     };
   }, [pathname]);
+
+  // Re-sync the stored user so a released ("hold" -> "active") account sees
+  // the banner clear on the next page load without logging out.
+  useEffect(() => {
+    if (user?.account_status === 'hold') {
+      refreshUser();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const contentWidth =
     width === 'wide' ? 'max-w-7xl mx-auto px-6 py-6' : 'max-w-5xl mx-auto px-6 py-6';
@@ -193,7 +202,21 @@ export default function AppShell({ title, description, action, children, width =
           <div className="flex shrink-0 items-center gap-3">{action}</div>
         </header>
 
-        <main className={contentWidth}>{children}</main>
+        <main className={contentWidth}>
+          {user?.account_status === 'hold' && (
+            <div className="mb-4 flex items-start gap-3 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
+              <svg className="mt-0.5 h-5 w-5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+              </svg>
+              <span>
+                <strong className="font-semibold">Account on hold.</strong> An administrator
+                needs to approve your account before you can create campaigns, run research
+                or send anything. You can look around in the meantime.
+              </span>
+            </div>
+          )}
+          {children}
+        </main>
       </div>
     </div>
   );
