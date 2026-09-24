@@ -81,7 +81,7 @@ class LeadService:
     @staticmethod
     async def get_campaign_leads(
         db: AsyncSession,
-        campaign_id: int,
+        campaign_id: Optional[int],
         user_id: int,
         skip: int = 0,
         limit: int = 50,
@@ -90,11 +90,12 @@ class LeadService:
         max_score: Optional[int] = None,
     ) -> tuple[list[Lead], int]:
         """
-        Get all leads for a campaign with filtering and pagination.
+        Get leads with filtering and pagination.
 
         Args:
             db: Database session
-            campaign_id: Campaign ID
+            campaign_id: Campaign ID, or None for ALL of the user's leads
+                (dashboard Leads tab)
             user_id: User ID (for ownership verification)
             skip: Number of records to skip
             limit: Maximum number of records to return
@@ -105,8 +106,13 @@ class LeadService:
         Returns:
             Tuple of (leads list, total count)
         """
+        # Base filters - campaign is optional (None = every campaign the user owns)
+        base_filters = [Lead.user_id == user_id]
+        if campaign_id is not None:
+            base_filters.append(Lead.campaign_id == campaign_id)
+
         # Build base query
-        query = select(Lead).where(Lead.campaign_id == campaign_id, Lead.user_id == user_id)
+        query = select(Lead).where(*base_filters)
 
         # Apply filters
         if status:
@@ -117,9 +123,7 @@ class LeadService:
             query = query.where(Lead.lead_score <= max_score)
 
         # Get total count
-        count_query = select(func.count(Lead.id)).where(
-            Lead.campaign_id == campaign_id, Lead.user_id == user_id
-        )
+        count_query = select(func.count(Lead.id)).where(*base_filters)
         if status:
             count_query = count_query.where(Lead.status == status)
         if min_score is not None:
@@ -172,6 +176,8 @@ class LeadService:
             lead.country = lead_data.country
         if lead_data.city is not None:
             lead.city = lead_data.city
+        if lead_data.campaign_id is not None:
+            lead.campaign_id = lead_data.campaign_id
 
         await db.commit()
         await db.refresh(lead)

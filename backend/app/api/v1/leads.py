@@ -5,9 +5,10 @@ Handles lead management, approval, rejection, and bulk operations.
 """
 
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.email_agent import EmailGenerationAgent, EmailParseError
@@ -16,6 +17,9 @@ from app.core.config import settings
 from app.db.base import get_db
 from app.dependencies import get_current_user, hold_guard
 from app.integrations.ai_base import AIProviderError
+from app.integrations.smtp_client import SMTPSendError, smtp_client
+from app.models.campaign import Campaign
+from app.models.email_log import EmailLog
 from app.models.lead import Lead
 from app.schemas.common import BulkActionRequest, PaginatedResponse
 from app.schemas.lead import (
@@ -25,11 +29,13 @@ from app.schemas.lead import (
     LeadDetailResponse,
     LeadDraftUpdate,
     LeadFilter,
+    LeadManualEmail,
     LeadResponse,
     LeadUpdate,
 )
 from app.schemas.user import UserResponse
 from app.services.campaign_service import campaign_service
+from app.services.email_service import UNSUBSCRIBE_FOOTER, email_service
 from app.services.export_service import export_service
 from app.services.lead_service import lead_service
 from app.services.template_service import template_service
@@ -41,7 +47,9 @@ router = APIRouter(dependencies=[Depends(hold_guard)])
 async def list_leads(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[UserResponse, Depends(get_current_user)],
-    campaign_id: int = Query(..., description="Campaign ID"),
+    campaign_id: Optional[int] = Query(
+        None, description="Campaign ID (omit to list leads across all your campaigns)"
+    ),
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
     status: str = Query(None, description="Filter by status"),
@@ -49,9 +57,10 @@ async def list_leads(
     max_score: int = Query(None, ge=0, le=100, description="Maximum lead score"),
 ):
     """
-    List leads for a campaign with filtering and pagination.
+    List leads with filtering and pagination.
 
-    Returns paginated list of leads filtered by status and score range.
+    Pass campaign_id to list one campaign's leads (the leads page), or omit it
+    to list every lead the user owns across campaigns (dashboard Leads tab).
     """
     skip = (page - 1) * per_page
 
@@ -344,7 +353,8 @@ async def update_lead(
     """
     Update lead details.
 
-    Allows updating contact information and notes.
+    Allows updating contact information, notes, and re-assigning the lead to
+    another campaign.
     """
     lead = await lead_service.get_lead(db, lead_id)
 
@@ -361,9 +371,159 @@ async def update_lead(
             detail="Not authorized to modify this lead",
         )
 
+    # Campaign assignment: the target campaign must belong to the user
+    if lead_data.campaign_id is not None and lead_data.campaign_id != lead.campaign_id:
+        result = await db.execute(
+            select(Campaign).where(
+                Campaign.id == lead_data.campaign_id, Campaign.user_id == current_user.id
+            )
+        )
+        if not result.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Target campaign not found or not authorized",
+            )
+
     updated_lead = await lead_service.update_lead(db, lead, lead_data)
 
     return LeadResponse.model_validate(updated_lead)
+
+
+@router.post("/{lead_id}/email", response_model=LeadActionResponse)
+async def email_lead(
+    lead_id: int,
+    email_data: LeadManualEmail,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[UserResponse, Depends(get_current_user)],
+):
+    """
+    Manually email a single lead straight from the app.
+
+    Explicit human action: sends immediately, appends the standard unsubscribe
+    footer, and logs the attempt to the emails table so the mailbox thread,
+    reply matching and email stats keep working. Suppressed and
+    do-not-contact leads are refused. Unlike bulk campaign sends there is no
+    cooldown check - re-emailing a lead manually is intentionally allowed.
+    """
+    lead = await _get_owned_lead(lead_id, db, current_user)
+
+    if not lead.email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This lead has no email address",
+        )
+    if lead.do_not_contact:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This lead is marked do-not-contact",
+        )
+    if not smtp_client.is_configured:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="SMTP is not configured - set SMTP_HOST, SMTP_USER and SMTP_PASSWORD",
+        )
+
+    suppression = await email_service.is_suppressed(db, current_user.id, lead.email)
+    if suppression is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"This email is on your suppression list (reason: {suppression.reason})",
+        )
+
+    subject = email_data.subject.strip()
+    body = email_data.body.strip()
+    if not subject or not body:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Subject and body must not be empty",
+        )
+
+    # Sender identity: explicit override > the identity the campaign was last
+    # sent from (same rule as mailbox replies) > the SMTP default user.
+    last_out = (
+        (
+            await db.execute(
+                select(EmailLog)
+                .where(EmailLog.lead_id == lead.id)
+                .order_by(EmailLog.id.desc())
+            )
+        )
+        .scalars()
+        .first()
+    )
+    campaign_settings = dict(lead.campaign.settings or {}) if lead.campaign else {}
+    from_email = (
+        email_data.from_email or (last_out.from_email if last_out else "") or settings.smtp_user
+    )
+    if not from_email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No sender address available - set SMTP_USER or pass from_email",
+        )
+    from_name = email_data.from_name or current_user.name or "ReachPulse"
+    reply_to = campaign_settings.get("reply_to") or from_email
+
+    # Same compliance footer the bulk campaign sends append.
+    final_body = f"{body}{UNSUBSCRIBE_FOOTER.format(unsubscribe_url=email_service.unsubscribe_url(lead))}"
+
+    try:
+        sent = await smtp_client.send(
+            from_addr=from_email,
+            from_name=from_name,
+            to_addr=lead.email,
+            subject=subject,
+            body=final_body,
+            reply_to=reply_to,
+        )
+    except SMTPSendError as exc:
+        db.add(
+            EmailLog(
+                campaign_id=lead.campaign_id,
+                lead_id=lead.id,
+                user_id=current_user.id,
+                to_email=lead.email,
+                from_email=from_email,
+                subject=subject,
+                body=final_body,
+                status="failed",
+                provider="smtp",
+                error_message=str(exc)[:500],
+                unsubscribe_token=email_service.unsubscribe_token(lead),
+            )
+        )
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Email send failed: {exc}",
+        )
+
+    db.add(
+        EmailLog(
+            campaign_id=lead.campaign_id,
+            lead_id=lead.id,
+            user_id=current_user.id,
+            to_email=lead.email,
+            from_email=from_email,
+            subject=subject,
+            body=final_body,
+            status="sent",
+            provider="smtp",
+            message_id=sent.message_id,
+            unsubscribe_token=email_service.unsubscribe_token(lead),
+            sent_at=datetime.utcnow(),
+        )
+    )
+    lead.emails_sent = (lead.emails_sent or 0) + 1
+    lead.last_emailed_at = datetime.utcnow()
+    # Advance the pipeline only forward - never downgrade replied/interested.
+    if lead.status in ("new", "researching", "qualified", "review", "approved", "scheduled"):
+        lead.status = "sent"
+    await db.commit()
+    await db.refresh(lead)
+
+    return LeadActionResponse(
+        id=lead.id, status=lead.status, message=f"Email sent to {lead.email}"
+    )
 
 
 @router.delete("/{lead_id}", status_code=status.HTTP_204_NO_CONTENT)

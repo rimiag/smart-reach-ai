@@ -7,6 +7,7 @@ import type { MailboxMessage, MailboxThread, MailboxThreadDetail } from '@/types
 import Link from 'next/link';
 import AppShell from '@/components/AppShell';
 import Skeleton from '@/components/Skeleton';
+import ComposeModal from '@/components/ComposeModal';
 
 function fmtTime(iso?: string): string {
   if (!iso) return '';
@@ -35,6 +36,7 @@ function MailboxContent() {
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState('');
+  const [showCompose, setShowCompose] = useState(false);
 
   const fetchThreads = useCallback(async () => {
     if (!isAuthenticated) return;
@@ -161,6 +163,12 @@ function MailboxContent() {
       description="Conversations with your leads - outreach and replies in one thread"
       action={
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowCompose(true)}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium"
+          >
+            ✉ Compose
+          </button>
           <button
             onClick={handleCheck}
             disabled={isChecking}
@@ -377,6 +385,17 @@ function MailboxContent() {
           )}
         </div>
       </div>
+
+      {showCompose && (
+        <ComposeModal
+          onClose={() => setShowCompose(false)}
+          onSent={(leadId) => {
+            setShowCompose(false);
+            fetchThreads();
+            openThread(leadId);
+          }}
+        />
+      )}
     </AppShell>
   );
 }

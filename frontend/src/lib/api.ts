@@ -156,6 +156,8 @@ export const api = {
   bulkReject: (data: { ids: number[] }) => apiClient.post('/leads/bulk-reject', data),
   qualifyLead: (id: number) => apiClient.post(`/leads/${id}/qualify`),
   regenerateLeadEmail: (id: number) => apiClient.post(`/leads/${id}/regenerate`),
+  emailLead: (id: number, data: { subject: string; body: string; from_email?: string }) =>
+    apiClient.post(`/leads/${id}/email`, data),
   updateLeadDraft: (id: number, data: { subject: string; body: string }) =>
     apiClient.put(`/leads/${id}/draft`, data),
   approveAllLeads: (id: number) => apiClient.post(`/campaigns/${id}/approve-all`),
