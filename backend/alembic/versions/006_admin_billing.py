@@ -6,7 +6,7 @@ Create Date: 2026-09-14
 
 Not wired into the deploy (same policy as 001-005): fresh databases get these
 columns via create_all; existing databases get them via manual ALTER, see
-STAGING_DEPLOYMENT.md section "Admin panel rollout".
+DEPLOYMENT.md §4.8 "Admin bootstrap on staging".
 """
 
 import sqlalchemy as sa

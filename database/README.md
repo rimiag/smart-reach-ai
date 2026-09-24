@@ -81,7 +81,7 @@ CREATE DATABASE <database> CHARACTER SET utf8mb4;
 ## Full recovery (broken database)
 
 This **destroys all data** - the staging-DB reset in
-`STAGING_DEPLOYMENT.md` is the same operation driven by CI.
+`DEPLOYMENT.md` §4.6 is the same operation driven by CI.
 
 ```bash
 docker exec -it smart-reach-ai-staging-db-1 mysql -u root -p -e "

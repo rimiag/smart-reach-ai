@@ -140,7 +140,7 @@ jobs:
       - name: Prepare .staging.env
         run: |
           if [ ! -f /opt/smart-reach-ai-staging/.staging.env ]; then
-            echo "::error::/opt/smart-reach-ai-staging/.staging.env is missing - create it from .staging.env.example (see STAGING_DEPLOYMENT.md)"
+            echo "::error::/opt/smart-reach-ai-staging/.staging.env is missing - create it from .staging.env.example (see DEPLOYMENT.md)"
             exit 1
           fi
           cp /opt/smart-reach-ai-staging/.staging.env ./.staging.env
@@ -150,7 +150,7 @@ jobs:
       # Actions tab to wipe the db volume so it re-initializes from the current
       # .staging.env + init.sql. Deletes all staging data -
       # keep it "no" otherwise. Reset to "no" after use. Full procedure:
-      # STAGING_DEPLOYMENT.md, section "One-time staging DB reset".
+      # DEPLOYMENT.md §4.6 "One-time staging DB reset".
       - name: Reset staging db volume (only when RESET_STAGING_DB=yes)
         if: vars.RESET_STAGING_DB == 'yes'
         run: |
