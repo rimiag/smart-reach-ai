@@ -14,7 +14,7 @@
 #      - NEXT_PUBLIC_* is baked into the JS bundle at BUILD time)
 #   3. deploy on the prod EC2 via its self-hosted runner (label: prod)
 #
-# One-time setup (PROD_DEPLOYMENT.md): EC2 runner + /opt/smart-reach-ai-prod/
+# One-time setup (DEPLOYMENT.md): EC2 runner + /opt/smart-reach-ai-prod/
 # .prod.env + the GitHub Environment "production" holding the
 # NEXT_PUBLIC_API_URL variable (environment variables override repo variables
 # for jobs that declare the environment - staging keeps its repo variable).
@@ -165,7 +165,7 @@ jobs:
       - name: Prepare .prod.env
         run: |
           if [ ! -f /opt/smart-reach-ai-prod/.prod.env ]; then
-            echo "::error::/opt/smart-reach-ai-prod/.prod.env is missing - create it from .prod.env.example (see PROD_DEPLOYMENT.md)"
+            echo "::error::/opt/smart-reach-ai-prod/.prod.env is missing - create it from .prod.env.example (see DEPLOYMENT.md)"
             exit 1
           fi
           cp /opt/smart-reach-ai-prod/.prod.env ./.prod.env

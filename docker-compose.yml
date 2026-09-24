@@ -184,7 +184,7 @@ services:
       # credentials configured here. ("mysqladmin ping" alone reports healthy
       # even when authentication is broken - that once masked a credential
       # drift between .staging.env and the initialized db volume, see
-      # STAGING_DEPLOYMENT.md "Access denied (1045)".)
+      # DEPLOYMENT.md "Access denied (1045)".)
       test: ["CMD-SHELL", "mysql -u $${MYSQL_USER} -p$${MYSQL_PASSWORD} -e 'SELECT 1' $${MYSQL_DATABASE:-leadgen_db}"]
       interval: 10s
       timeout: 5s

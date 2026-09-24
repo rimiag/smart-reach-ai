@@ -4,7 +4,7 @@
 # Runs on the prod EC2 next to your existing website. The host nginx proxies:
 #   reachpulse.<domain> -> 127.0.0.1:3000  (frontend)
 #   api.<domain>        -> 127.0.0.1:8000  (backend)
-# See PROD_DEPLOYMENT.md for the full setup guide.
+# See DEPLOYMENT.md for the full setup guide.
 #
 # Differences from the staging docker-compose.yml (do NOT casually merge them):
 #   * PULL-ONLY: no build: sections. Images come from GHCR pinned by IMAGE_TAG
@@ -177,7 +177,7 @@ services:
       # Real auth check: verifies the APP user can actually connect with the
       # credentials configured here ("mysqladmin ping" alone reports healthy
       # even when authentication is broken - it once masked a credential
-      # drift on staging, see STAGING_DEPLOYMENT.md).
+      # drift on staging, see DEPLOYMENT.md §7).
       test: ["CMD-SHELL", "mysql -u $${MYSQL_USER} -p$${MYSQL_PASSWORD} -e 'SELECT 1' $${MYSQL_DATABASE:-leadgen_db}"]
       interval: 10s
       timeout: 5s

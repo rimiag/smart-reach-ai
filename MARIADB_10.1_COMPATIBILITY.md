@@ -59,7 +59,7 @@ All database code, migrations, and configurations have been updated to work with
 | [.env](.env) | Updated DATABASE_URL |
 | [backend/.env](backend/.env) | Updated DATABASE_URL |
 | [.env.example](.env.example) | Updated DATABASE_URL example |
-| [LOCAL_DEVELOPMENT_GUIDE.md](LOCAL_DEVELOPMENT_GUIDE.md) | Updated with MariaDB instructions |
+| [DEPLOYMENT.md](DEPLOYMENT.md) | Local + staging + prod deployment (MariaDB setup in section 3) |
 
 ---
 

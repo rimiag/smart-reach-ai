@@ -1,298 +1,170 @@
-# AI Lead Generation & Outreach Platform
+# SmartReach AI (ReachPulse)
 
-A professional, scalable AI-powered B2B lead generation and outreach platform that discovers potential clients via web search, extracts public business contact information, uses AI to qualify and score leads, generates personalized outreach emails, and manages controlled email campaigns.
+AI-powered B2B lead generation and cold-outreach platform: discovers potential
+clients via web search, crawls their sites for public contact info, qualifies
+and scores leads with AI, drafts personalized emails for human approval, sends
+them with full compliance machinery, detects replies, and keeps the whole
+conversation in one mailbox.
 
-## Implementation Status
+**Live (production):** https://reachpulse.medidatalab.com ·
+API: https://api.medidatalab.com
 
-**Phase 1 (MVP) — ✅ COMPLETE**
-
-| Iteration | Scope | Status |
-|-----------|-------|--------|
-| 1.0 – 1.2 | Foundation: auth, campaigns, frontend | ✅ Complete |
-| 1.3 | Lead system (model, API, UI) | ✅ Complete |
-| 1.4 | Search & discovery (multi-provider search agent, live progress tracking) | ✅ Complete |
-| 1.5 | Crawling & extraction (robots.txt-compliant crawler, contact extraction, lead creation) | ✅ Complete |
-| 1.6 | Export (CSV/Excel/JSON) & campaign statistics | ✅ Complete |
-| Phase 2 | AI qualification (score + reasoning) & personalized email generation | ✅ Complete |
-| Phase 3 | Email sending via SMTP with human approval, suppression list, limits | ✅ Complete |
-| Phase 4 | Reply detection (IMAP + AI classification), reply inbox, analytics | ✅ Complete |
-| Phase 5 | Follow-up sequences, AI sales assistant, lead intent detection | ✅ Complete |
-| Roadmap | CRM sync, Sheets, LinkedIn, WhatsApp/SMS, scheduling | ⬜ Optional |
-
-Details: [development_plan.md](development_plan.md), [PHASE1_COMPLETE.md](PHASE1_COMPLETE.md), per-iteration summaries ([1.4](ITERATION_1.4_COMPLETE.md), [1.5](ITERATION_1.5_COMPLETE.md), [1.6](ITERATION_1.6_COMPLETE.md)).
-
-## Features
-
-- **Keyword-based Discovery**: Search for potential clients using 5-10 targeted keywords
-- **Intelligent Crawling**: Extract public business contact information from websites
-- **AI Lead Qualification**: Score and qualify leads using OpenAI GPT-4 or Anthropic Claude
-- **Personalized Outreach**: Generate AI-powered personalized email templates
-- **Multi-Channel Email**: Support for SMTP, Amazon SES, Gmail API, and Microsoft Graph
-- **Human Approval Workflow**: Review and approve leads and emails before sending
-- **Campaign Management**: Track campaigns, leads, emails, and responses
-- **Reply Detection**: AI-powered email reply classification and lead status updates
-- **Compliance Ready**: Suppression lists, unsubscribe handling, rate limiting, and robots.txt compliance
-
-## Architecture
+## How it works
 
 ```
-Frontend (Next.js + Tailwind) → FastAPI Backend → MySQL Database
-                                  ↓
-                             Celery Workers
-                                  ↓
-                    AI Agents (Search, Crawl, Qualify, Outreach, Reply)
-                                  ↓
-                    External APIs (OpenAI, Anthropic, Bing, SES, etc.)
+Campaign (5-10 keywords)
+  -> Web search (SerpAPI; multi-provider architecture)
+  -> Polite crawl (robots.txt-compliant, contact-page finder)
+  -> Leads with contact info + provenance (deduped per campaign)
+  -> AI qualification: score + reasoning (Anthropic / OpenAI / Gemini)
+  -> AI-drafted personalized emails -> HUMAN APPROVAL
+  -> SMTP send with unsubscribe link, suppression list, rate limits
+  -> IMAP reply detection -> AI classification -> status automation
+  -> Threaded mailbox, follow-up sequences, analytics, CSV/Excel/JSON export
 ```
 
-## Technology Stack
+## Feature highlights
 
-- **Frontend**: Next.js 14, React, TypeScript, Tailwind CSS, shadcn/ui
-- **Backend**: Python 3.11+, FastAPI, SQLAlchemy, Alembic
-- **Database**: MySQL 8.0
-- **Cache/Queue**: Redis 7, Celery
-- **AI**: OpenAI GPT-4, Anthropic Claude (configurable)
-- **Search**: Bing Search API, Google Programmable Search, SerpAPI
-- **Email**: SMTP, Amazon SES, Gmail API, Microsoft Graph
+- **Campaigns & research**: keyword-driven discovery with live progress;
+  "Research Again" re-runs search with pagination to find *more* sites.
+- **Leads workbench**: all leads across campaigns — manual create, campaign
+  re-assignment, one-off manual emailing, status pipeline, export.
+- **Approval-first sending**: nothing ships without a human; bulk sends and
+  single/manual sends both log an auditable EmailLog row.
+- **Mailbox**: threaded conversations, unread badges, compose (pick a lead or
+  auto-create one from a fresh address), manual IMAP poll.
+- **Replies**: AI-classified (interested / not-interested / unsubscribe / …),
+  automatic lead status updates, reply analytics.
+- **Follow-ups**: timed AI-drafted follow-ups for silent leads, still
+  approval-gated.
+- **AI assistant**: chat over your own campaigns/leads data.
+- **Compliance**: suppression list, do-not-contact, per-user rate limits,
+  unsubscribe footer + one-click unsubscribe, robots.txt compliance.
+- **Admin panel**: users, manual billing (plan/status/notes), usage,
+  key-presence checks, system overview; guarded admin routes + bootstrap CLI.
 
-## Quick Start
+## Tech stack
 
-### Prerequisites
+| Layer | Tech |
+|---|---|
+| Frontend | Next.js 14 (app router), React, TypeScript, Tailwind CSS |
+| Backend | Python 3.11+, FastAPI, SQLAlchemy 2.0 (async), Pydantic v2 |
+| Database | MariaDB 10.1 (staging) / MySQL 8.0 (prod) — schema is engine-agnostic by design |
+| Queue | Celery + Redis (worker, beat scheduler, Flower) |
+| AI | Anthropic Claude, OpenAI, Gemini — first configured provider wins |
+| Search | SerpAPI (active), pluggable: Google Programmable Search, Bing |
+| Email | SMTP sending + IMAP polling; per-user sender identity |
+| Images | GHCR: `ghcr.io/rimiag/smart-reach-ai-{backend,frontend}` (`sha-<7>` staging / `prod-<sha7>` prod) |
+| CI/CD | GitHub Actions, manual dispatch only, branch-pinned (staging branch / main), self-hosted deploy runner |
 
-- Docker and Docker Compose
-- Python 3.11+ (for local development)
-- Node.js 20+ (for local development)
-
-### 1. Clone and Configure
+## Quick start (local, no app containers)
 
 ```bash
-# Clone the repository
-git clone <repository-url>
-cd ai-lead-generation
+# 1. Database + Redis only:
+docker-compose up -d db redis
 
-# Copy environment file
-cp .env.example .env
-
-# Edit .env with your API keys
-nano .env
-```
-
-### 2. Start with Docker
-
-```bash
-# Start all services
-docker-compose up -d
-
-# Check services are running
-docker-compose ps
-
-# View logs
-docker-compose logs -f backend
-```
-
-### 3. Initialize Database
-
-```bash
-# Run migrations
-docker-compose exec backend alembic upgrade head
-
-# Create admin user (optional)
-docker-compose exec backend python -m app.cli.create_admin
-```
-
-### 4. Access the Application
-
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:8000
-- API Docs: http://localhost:8000/docs
-
-## Development Setup
-
-### Backend (Local Development)
-
-```bash
+# 2. Backend (Python 3.11+):
 cd backend
-
-# Create virtual environment
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-
-# Install dependencies
+python -m venv .venv && .venv\Scripts\activate      # Windows
 pip install -r requirements.txt
-pip install -r requirements-dev.txt
+copy .env.example .env                               # fill DATABASE_URL + SECRET_KEY
+uvicorn app.main:app --reload --port 8000            # http://localhost:8000/docs
+#   extra terminals: celery -A app.tasks.celery_app worker / beat
 
-# Run development server
-uvicorn app.main:app --reload --port 8000
-
-# Run Celery worker (separate terminal)
-celery -A app.tasks.celery_app worker --loglevel=info
-
-# Run Celery beat (separate terminal)
-celery -A app.tasks.celery_app beat --loglevel=info
-```
-
-### Frontend (Local Development)
-
-```bash
+# 3. Frontend (Node 20+):
 cd frontend
-
-# Install dependencies
 npm install
-
-# Run development server
-npm run dev
+echo NEXT_PUBLIC_API_URL=http://localhost:8000 > .env.local
+npm run dev                                          # http://localhost:3000
 ```
 
-### Database Migrations
+Tables are created automatically on first boot (ORM models are the source of
+truth). Register, then `python promote_admin.py <email>` for admin.
+Full details incl. Celery and env keys: [DEPLOYMENT.md](DEPLOYMENT.md) §3.
 
-```bash
-# Create a new migration
-alembic revision --autogenerate -m "description"
+## Deployments
 
-# Apply migrations
-alembic upgrade head
+| Environment | How |
+|---|---|
+| **Staging** — Ubuntu VM `192.168.1.30`, MariaDB 10.1 | `git push origin main:staging`, then Actions → **Build and Deploy** → Run workflow |
+| **Production** — EC2, MySQL 8, behind your nginx + certbot | Actions → **Deploy to Production** (builds from `main`), then on the EC2: `docker compose --env-file .prod.env -f docker-compose.prod.yml pull` **before** `up -d --remove-orphans` (pull-only compose — `up -d` alone reuses stale images) |
 
-# Rollback migration
-alembic downgrade -1
+Everything (one-time setup, env-file mapping, schema/migrations playbook,
+backups, rollback, troubleshooting): [DEPLOYMENT.md](DEPLOYMENT.md).
 
-# View migration history
-alembic history
+## Repository layout
+
+```
+backend/
+  app/api/v1/          # REST endpoints (auth, campaigns, leads, mailbox, admin, ...)
+  app/models/          # SQLAlchemy ORM models - the schema source of truth
+  app/services/        # business logic (email, research, replies, exports, ...)
+  app/integrations/    # AI providers, search providers, SMTP/IMAP
+  app/crawlers/        # robots.txt, page finder, polite fetcher, extraction
+  app/tasks/           # Celery app + tasks
+  app/db/ensure_schema.py   # self-applying column ADDs on boot
+  docker-entrypoint.sh # wait-for-db, create tables, ensure columns, verify
+  alembic/versions/    # 001-009 (convention/history - NOT wired into deploys)
+  promote_admin.py     # admin bootstrap CLI
+  generate_schema_sql.py    # regenerates database/schema_full.sql from ORM
+frontend/
+  src/app/             # dashboard, leads, campaigns, replies (mailbox),
+                       #   analytics, assistant, admin pages
+  src/components/      # AppShell, modals (lead form, manual email, compose), ...
+  src/lib/api.ts       # typed axios client
+database/              # schema_full.sql + incremental/ (manual fallback) + README
+docker-compose.yml     # staging stack (also runs local db+redis)
+docker-compose.prod.yml# prod stack (pull-only)
+.github/workflows/     # ci-cd.yml (staging), ci-cd-prod.yml (prod)
 ```
 
 ## Configuration
 
-### Required API Keys
+Env templates: `backend/.env.example` (local/staging keys),
+`.staging.env.example` (staging VM), `.prod.env.example` (prod EC2).
+Key groups: security (`SECRET_KEY`, `ENCRYPTION_KEY`), database
+(`DATABASE_URL` or `DB_*`), Redis/Celery, `SERPAPI_KEY`, AI keys (any one of
+`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY`), `SMTP_*` to send,
+`IMAP_*` for reply detection, follow-up tuning. Never commit real values.
 
-Configure these in your `.env` file:
+## Database schema policy (short version)
 
-**AI Providers** (at least one required):
-- `OPENAI_API_KEY` - For lead qualification and email generation
-- `ANTHROPIC_API_KEY` - Alternative AI provider
+ORM models are the single source of truth. Every backend container boot:
+waits for db → creates missing **tables** → auto-adds missing **columns**
+(`ALTER TABLE ... ADD COLUMN`) → verifies, failing loudly otherwise.
+Consequences:
 
-**Search Providers** (at least one required):
-- `BING_SEARCH_API_KEY` - Bing Search API (1000 free calls/month)
-- `GOOGLE_SEARCH_API_KEY` + `GOOGLE_SEARCH_ENGINE_ID` - Google Custom Search
-- `SERPAPI_KEY` - SerpAPI (aggregator)
+- Adding a nullable column = change the model and deploy. Nothing else.
+- NOT NULL columns need `server_default` on the model.
+- Type changes / drops / new-column indexes stay manual
+  (`database/` scripts are the guarded fallback).
+- Alembic files are kept as history but are **not** wired into deploys.
 
-**Email Providers** (at least one required):
-- SMTP: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`
-- SES: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
-- Gmail: `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`
-- Microsoft: `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`
+Full playbook (decision table, manual scripts, traps):
+[DEPLOYMENT.md](DEPLOYMENT.md) §6 and [database/README.md](database/README.md).
 
-## Project Structure
+## Development workflow
 
-```
-ai-lead-generation/
-├── backend/                 # Python FastAPI backend
-│   ├── app/
-│   │   ├── api/            # API endpoints
-│   │   ├── agents/         # AI agents
-│   │   ├── crawlers/       # Web crawlers
-│   │   ├── db/             # Database models and migrations
-│   │   ├── integrations/   # External service integrations
-│   │   ├── schemas/        # Pydantic schemas
-│   │   ├── services/       # Business logic
-│   │   └── tasks/          # Celery background tasks
-│   └── tests/              # Backend tests
-├── frontend/               # Next.js frontend
-│   ├── src/
-│   │   ├── app/           # Next.js app router
-│   │   ├── components/    # React components
-│   │   ├── hooks/         # Custom hooks
-│   │   └── lib/           # Utilities
-└── docker-compose.yml     # Docker orchestration
-```
+- **Type-check gate**: `cd frontend && npx tsc --noEmit` (CI runs it inside
+  the Docker build; IDE diagnostics can be stale — tsc is the truth).
+- **Backend style**: black + isort, line length 100.
+- **Lockfile trap**: the frontend image is alpine/musl — after any local
+  `npm install`, regenerate for linux:
+  `npx -y npm@11.19.0 install --package-lock-only --os=linux --cpu=x64 --libc=musl`.
+- **Deploys are manual**: pushing never deploys anything. Staging workflow
+  builds the staging branch; prod workflow builds main.
+- Secrets live only in env files on the machines that use them
+  (`backend/.env`, VM `.staging.env`, EC2 `.prod.env`) — all gitignored.
 
-## Usage
+## Documentation
 
-### 1. Create a Campaign
-
-1. Navigate to the dashboard
-2. Click "New Campaign"
-3. Enter campaign name and 5-10 keywords
-4. Click "Start Research"
-
-### 2. Review Leads
-
-1. Wait for research to complete
-2. Go to Leads tab
-3. Filter by score or status
-4. Review AI qualification
-5. Approve or reject leads
-
-### 3. Generate Emails
-
-1. Go to Templates tab
-2. Generate AI templates
-3. Customize templates
-4. Preview personalized emails
-
-### 4. Send Campaign
-
-1. Select approved leads
-2. Review personalized emails
-3. Edit if needed
-4. Approve campaign
-5. Emails send automatically (respecting limits)
-
-### 5. Monitor Replies
-
-1. Check Replies tab for incoming responses
-2. AI classifies reply sentiment
-3. Interested leads are flagged
-4. Follow up as needed
-
-## Deployment
-
-### Docker Production
-
-```bash
-# Build production images
-docker-compose -f docker-compose.prod.yml build
-
-# Start production services
-docker-compose -f docker-compose.prod.yml up -d
-```
-
-### Kubernetes
-
-See `k8s/` directory for Kubernetes manifests.
-
-## Testing
-
-```bash
-# Backend tests
-cd backend
-pytest tests/ -v
-
-# Frontend tests
-cd frontend
-npm test
-
-# E2E tests
-npm run test:e2e
-```
-
-## Security & Compliance
-
-- **Rate Limiting**: Configurable per-user and per-IP limits
-- **Email Compliance**: CAN-SPAM compliant, unsubscribe handling
-- **Data Privacy**: GDPR features, data export/delete
-- **Crawler Respect**: robots.txt compliance, rate limits
-- **Authentication**: JWT tokens, bcrypt password hashing
-- **API Key Encryption**: All external API keys encrypted at rest
-
-## Monitoring & Logging
-
-- Application logs: `/app/logs/app.log`
-- Celery task logs: Viewable via Celery Flower (optional)
-- Database logs: Available via Docker Compose
+| Doc | Read it for |
+|---|---|
+| [DEPLOYMENT.md](DEPLOYMENT.md) | Local + staging + prod deployment, env files, schema/migrations playbook, backups, rollback, troubleshooting |
+| [DEVELOPMENT.md](DEVELOPMENT.md) | The full build history: every iteration, feature, decision and lesson |
+| [database/README.md](database/README.md) | Manual schema scripts: usage, verification, full recovery |
+| [MARIADB_10.1_COMPATIBILITY.md](MARIADB_10.1_COMPATIBILITY.md) | Why indexed strings are capped at 191 chars |
 
 ## License
 
-Proprietary - All rights reserved
-
-## Support
-
-For issues and questions, contact the development team.
+Proprietary — all rights reserved.
