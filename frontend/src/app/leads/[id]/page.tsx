@@ -8,6 +8,7 @@ import type { Lead } from '@/types';
 import Link from 'next/link';
 import AppShell from '@/components/AppShell';
 import Header from '@/components/Header';
+import ManualEmailModal from '@/components/ManualEmailModal';
 
 export default function LeadDetailPage() {
   const { id } = useParams();
@@ -22,6 +23,7 @@ export default function LeadDetailPage() {
   const [draftSubject, setDraftSubject] = useState('');
   const [draftBody, setDraftBody] = useState('');
   const [draftMessage, setDraftMessage] = useState('');
+  const [showEmailModal, setShowEmailModal] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated || !id) return;
@@ -360,6 +362,14 @@ export default function LeadDetailPage() {
           >
             {isProcessing ? 'Working...' : '✉ Generate Email'}
           </button>
+          <button
+            onClick={() => setShowEmailModal(true)}
+            disabled={!lead.email}
+            title={lead.email ? 'Send an email to this lead now' : 'This lead has no email address'}
+            className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+          >
+            ✉ Email lead
+          </button>
           <Link
             href={`/campaigns/${lead.campaign_id}`}
             className="px-6 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-md transition-colors"
@@ -367,6 +377,20 @@ export default function LeadDetailPage() {
             ← Back to Campaign
           </Link>
         </div>
+
+        {showEmailModal && (
+          <ManualEmailModal
+            lead={lead}
+            onClose={() => setShowEmailModal(false)}
+            onSent={() => {
+              setShowEmailModal(false);
+              api
+                .getLead(Number(id))
+                .then((response) => setLead(response.data))
+                .catch(() => {});
+            }}
+          />
+        )}
 
         <div className="grid md:grid-cols-2 gap-6">
           {/* Contact Information */}

@@ -76,6 +76,9 @@ class LeadUpdate(BaseModel):
     country: Optional[str] = Field(None, max_length=100)
     city: Optional[str] = Field(None, max_length=100)
     notes: Optional[str] = Field(None, description="Additional notes")
+    # Assign / reassign the lead to a campaign (target ownership is checked in
+    # the endpoint, since it needs the current user).
+    campaign_id: Optional[int] = Field(None, gt=0, description="Campaign to assign the lead to")
 
 
 class BulkActionRequest(BaseModel):
@@ -89,6 +92,15 @@ class LeadDraftUpdate(BaseModel):
 
     subject: str = Field(..., min_length=1, max_length=255, description="Email subject line")
     body: str = Field(..., min_length=1, description="Email body text")
+
+
+class LeadManualEmail(BaseModel):
+    """Schema for manually emailing a single lead straight from the app."""
+
+    subject: str = Field(..., min_length=1, max_length=255, description="Email subject line")
+    body: str = Field(..., min_length=1, description="Email body text")
+    from_email: Optional[str] = Field(None, description="Override the sender address")
+    from_name: Optional[str] = Field(None, description="Override the sender display name")
 
 
 # -----------------------------------------------------------------------------
