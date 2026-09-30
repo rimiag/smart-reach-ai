@@ -1,0 +1,77 @@
+# SmartReach AI - Flower (Celery monitor).
+# Gets only the configmap (no DATABASE_URL) so its entrypoint skips the DB
+# check - it only needs the broker.
+apiVersion: v1
+kind: Service
+metadata:
+  name: flower
+  namespace: smartreach
+  labels:
+    app: smartreach
+    component: flower
+spec:
+  type: NodePort
+  ports:
+    - port: 5555
+      targetPort: 5555
+      nodePort: 30082        # http://<minikube-ip>:30082
+  selector:
+    app: smartreach
+    component: flower
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flower
+  namespace: smartreach
+  labels:
+    app: smartreach
+    component: flower
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: smartreach
+      component: flower
+  template:
+    metadata:
+      labels:
+        app: smartreach
+        component: flower
+    spec:
+      containers:
+        - name: flower
+          image: smartreach-ai/backend:local
+          imagePullPolicy: IfNotPresent
+          command:
+            - celery
+            - -A
+            - app.tasks.celery_app
+            - flower
+            - --port=5555
+          envFrom:
+            - configMapRef:
+                name: smartreach-config
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 512Mi
+          startupProbe:
+            httpGet:
+              path: /healthcheck
+              port: 5555
+            periodSeconds: 5
+            failureThreshold: 24
+          readinessProbe:
+            httpGet:
+              path: /healthcheck
+              port: 5555
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthcheck
+              port: 5555
+            periodSeconds: 30

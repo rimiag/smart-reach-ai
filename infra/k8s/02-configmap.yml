@@ -1,0 +1,33 @@
+# SmartReach AI - non-secret configuration.
+# Secrets (SECRET_KEY, DATABASE_URL, provider keys...) come from the
+# "smartreach-env" Secret, created from secrets.env - never put them here.
+#
+# ONE-TIME STEP before first apply: replace 192.168.49.2 with your
+# cluster IP (see README step 4). The value is machine-specific - do not
+# commit the substituted file; `git checkout infra/k8s/02-configmap.yml`
+# restores the placeholder.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: smartreach-config
+  namespace: smartreach
+  labels:
+    app: smartreach
+data:
+  # ENV_FILE set = do not look for a .env file inside the container
+  # (same trick docker-compose uses with ENV_FILE: docker).
+  ENV_FILE: "k8s"
+  ENVIRONMENT: "development"
+  LOG_LEVEL: "INFO"
+  LOG_FORMAT: "json"
+
+  # In-cluster service addresses (cluster DNS names, no IP needed).
+  REDIS_URL: "redis://redis:6379/0"
+  CELERY_BROKER_URL: "redis://redis:6379/0"
+  CELERY_RESULT_BACKEND: "redis://redis:6379/0"
+
+  # Where the browser reaches the app (NodePorts on the minikube IP).
+  # The frontend ALSO needs this at image BUILD time - see README step 2.
+  API_URL: "http://192.168.49.2:30081"
+  FRONTEND_URL: "http://192.168.49.2:30080"
+  CORS_ORIGINS: "http://192.168.49.2:30080"

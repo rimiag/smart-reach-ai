@@ -86,6 +86,7 @@ Full details incl. Celery and env keys: [DEPLOYMENT.md](DEPLOYMENT.md) §3.
 
 | Environment | How |
 |---|---|
+| **Kubernetes (minikube)** — local, plain manifests | `infra/k8s/README.md`: build images with `minikube image build`, `kubectl apply -f infra/k8s/` — NodePort URLs, the rehearsal for EKS |
 | **Staging** — Ubuntu VM `192.168.1.30`, MariaDB 10.1 | `git push origin main:staging`, then Actions → **Build and Deploy** → Run workflow |
 | **Production** — EC2, MySQL 8, behind your nginx + certbot | Actions → **Deploy to Production** (builds from `main`), then on the EC2: `docker compose --env-file .prod.env -f docker-compose.prod.yml pull` **before** `up -d --remove-orphans` (pull-only compose — `up -d` alone reuses stale images) |
 
@@ -113,6 +114,7 @@ frontend/
   src/components/      # AppShell, modals (lead form, manual email, compose), ...
   src/lib/api.ts       # typed axios client
 database/              # schema_full.sql + incremental/ (manual fallback) + README
+infra/k8s/             # Kubernetes manifests (minikube now, EKS path) + README
 docker-compose.yml     # staging stack (also runs local db+redis)
 docker-compose.prod.yml# prod stack (pull-only)
 .github/workflows/     # ci-cd.yml (staging), ci-cd-prod.yml (prod)

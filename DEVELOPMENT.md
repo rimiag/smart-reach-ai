@@ -25,6 +25,7 @@ Timeline at a glance:
 | 2026-09-22 | Mailbox: real inbox, threads, reply matching |
 | 2026-09-23 | Leads workbench + manual emailing + mailbox compose; prod pull-only lesson |
 | 2026-09-24 | Repo cleanup: docs consolidated (this file, DEPLOYMENT.md, README.md) |
+| 2026-09-24 | Kubernetes: full stack deployed on minikube (`infra/k8s/`), path to EKS mapped |
 
 ---
 
@@ -293,6 +294,28 @@ backend log confirm a new image booted.
   `deploy.sh/.bat`, `run-migrations.sh/.bat`, `backend/migrate.py`,
   one-off fix scripts, stale env templates. Alembic files 001-009 kept as
   convention (not wired into deploys — §6.2 of DEPLOYMENT.md).
+
+## Kubernetes journey starts — minikube (2026-09-24)
+
+- Goal: minikube first, then staging/prod on managed K8s (EKS) later.
+  User decisions: **plain manifests** (no Helm/Kustomize) in `infra/k8s/`,
+  **NodePort** access (no hosts-file edits) — frontend `:30080`, backend
+  `:30081`, flower `:30082`.
+- `infra/k8s/01…09*.yml`: namespace + configmap + MySQL 8 StatefulSet
+  (PVC, real-auth probes) + Redis + backend/worker/scheduler/flower +
+  frontend. Worker/beat use an initContainer that waits for
+  `backend:8000/health` — the K8s equivalent of compose's
+  `depends_on: service_healthy`, preventing table-creation races.
+- Secrets stay out of YAML entirely: `kubectl create secret
+  --from-env-file=infra/k8s/secrets.env` (gitignored); `DATABASE_URL`
+  lives whole in the secret. ConfigMap uses a `__MINIKUBE_IP__`
+  placeholder (machine-specific — substituted once, not committed).
+- Images built **inside** minikube (`minikube image build`, tags
+  `smartreach-ai/*:local`) — important on this laptop where the local
+  Docker context is broken. Frontend rebuild required if `minikube ip`
+  changes (API URL baked at build time).
+- Guide with ops/troubleshooting + "path to EKS" (GHCR images, RDS,
+  Ingress/ALB, External Secrets): `infra/k8s/README.md`.
 
 ---
 

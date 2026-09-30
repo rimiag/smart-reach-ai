@@ -1,0 +1,8 @@
+# SmartReach AI on Kubernetes - namespace
+# Everything the app needs lives in the "smartreach" namespace.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: smartreach
+  labels:
+    app: smartreach
