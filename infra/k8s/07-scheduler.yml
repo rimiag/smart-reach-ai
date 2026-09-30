@@ -1,0 +1,70 @@
+# SmartReach AI - Celery beat (periodic tasks: follow-ups, mailbox polling).
+# The beat schedule file is disposable state - an emptyDir is enough (it is
+# rebuilt on every start).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scheduler
+  namespace: smartreach
+  labels:
+    app: smartreach
+    component: scheduler
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: smartreach
+      component: scheduler
+  template:
+    metadata:
+      labels:
+        app: smartreach
+        component: scheduler
+    spec:
+      initContainers:
+        - name: wait-for-backend
+          image: smartreach-ai/backend:local
+          imagePullPolicy: IfNotPresent
+          command:
+            - python
+            - -c
+            - |
+              import sys, time, urllib.request
+              for i in range(120):
+                  try:
+                      urllib.request.urlopen("http://backend:8000/health", timeout=3)
+                      print("backend is healthy")
+                      sys.exit(0)
+                  except Exception:
+                      time.sleep(2)
+              sys.exit("backend never became healthy")
+      containers:
+        - name: scheduler
+          image: smartreach-ai/backend:local
+          imagePullPolicy: IfNotPresent
+          command:
+            - celery
+            - -A
+            - app.tasks.celery_app
+            - beat
+            - --loglevel=info
+            - --schedule
+            - /tmp/celerybeat-schedule
+          envFrom:
+            - configMapRef:
+                name: smartreach-config
+            - secretRef:
+                name: smartreach-env
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 512Mi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

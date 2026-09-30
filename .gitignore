@@ -80,3 +80,6 @@ Thumbs.db
 
 # TypeScript incremental build cache
 frontend/tsconfig.tsbuildinfo
+
+# Kubernetes local secrets (minikube)
+infra/k8s/secrets.env

@@ -1,0 +1,79 @@
+# SmartReach AI - FastAPI backend.
+# Image: built locally into minikube (README step 2), tag "local".
+# The Dockerfile ENTRYPOINT (backend/docker-entrypoint.sh) waits for the
+# database, creates missing tables and auto-adds missing columns
+# (ensure_schema) before starting uvicorn - the same boot logic as
+# docker-compose and the deployed VMs.
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: smartreach
+  labels:
+    app: smartreach
+    component: backend
+spec:
+  type: NodePort
+  ports:
+    - port: 8000
+      targetPort: 8000
+      nodePort: 30081        # http://<minikube-ip>:30081  (API + /docs)
+  selector:
+    app: smartreach
+    component: backend
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: smartreach
+  labels:
+    app: smartreach
+    component: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: smartreach
+      component: backend
+  template:
+    metadata:
+      labels:
+        app: smartreach
+        component: backend
+    spec:
+      containers:
+        - name: backend
+          image: smartreach-ai/backend:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: smartreach-config
+            - secretRef:
+                name: smartreach-env
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+          # Fresh boot also waits for mysql and may create tables.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 5
+            failureThreshold: 60   # up to 5 min
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 30

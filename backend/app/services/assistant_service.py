@@ -63,7 +63,8 @@ class AssistantService:
         if not self.ai_available:
             raise AIProviderError(
                 "No AI provider configured. Set ANTHROPIC_API_KEY, OPENAI_API_KEY, "
-                "or GEMINI_API_KEY (free: aistudio.google.com/apikey)."
+                "GEMINI_API_KEY (free: aistudio.google.com/apikey), or GROK_API_KEY "
+                "(paid: console.x.ai)."
             )
         context = await self._build_context(db, user_id)
         response = await self.client.complete(

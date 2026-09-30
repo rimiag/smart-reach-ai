@@ -21,6 +21,12 @@ guides were consolidated into this file; live ops questions start here.
 | Data policy | disposable | disposable test data | REAL — never reset casually |
 | Exposed ports | 3000/8000 localhost | LAN-only VM (reachable from hypervisor host) | 80/443 only; containers bind `127.0.0.1`, db/redis have no ports |
 
+**Fourth environment — Kubernetes:** a local minikube deployment (plain
+manifests in [infra/k8s/](infra/k8s/), NodePort access) exists as the first
+step of the K8s path toward staging/prod on managed Kubernetes (EKS). See
+[infra/k8s/README.md](infra/k8s/README.md) — the compose file above remains
+the staging deployment method.
+
 ---
 
 ## 1. How CI/CD works
@@ -591,6 +597,7 @@ docker exec -i smart-reach-ai-prod-db-1 sh -c \
 | Doc | Contents |
 |---|---|
 | [README.md](README.md) | What the product is, quick start, stack |
+| [infra/k8s/README.md](infra/k8s/README.md) | Kubernetes deployment: minikube today, the path to EKS |
 | [DEVELOPMENT.md](DEVELOPMENT.md) | Full build history: every iteration, feature, and lesson |
 | [database/README.md](database/README.md) | Manual schema scripts: usage, verification, full recovery |
 | [MARIADB_10.1_COMPATIBILITY.md](MARIADB_10.1_COMPATIBILITY.md) | Why indexed strings are capped at 191 chars (utf8mb4 on MariaDB 10.1) |

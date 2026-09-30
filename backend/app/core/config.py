@@ -162,11 +162,17 @@ class Settings(BaseSettings):
     )
 
     # -----------------------------------------------------------------------------
+    # AI Providers - xAI Grok (paid/prepaid fallback, OpenAI-compatible endpoint)
+    # -----------------------------------------------------------------------------
+    grok_api_key: str = Field(default="", description="xAI Grok API key (console.x.ai)")
+    grok_model: str = Field(default="", description="Grok model override (default grok-4.3)")
+
+    # -----------------------------------------------------------------------------
     # AI Providers - selection & behaviour (Phase 2)
     # -----------------------------------------------------------------------------
     ai_provider: str = Field(
         default="auto",
-        description="AI provider: auto, anthropic, openai or gemini",
+        description="AI provider: auto, anthropic, openai, gemini or grok",
     )
     ai_temperature: float = Field(default=0.7, description="Sampling temperature for generation")
     ai_auto_qualify: bool = Field(

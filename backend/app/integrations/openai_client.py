@@ -11,7 +11,12 @@ import logging
 from typing import Optional
 
 from app.core.config import settings
-from app.integrations.ai_base import AIProviderError, LLMClient, LLMResponse
+from app.integrations.ai_base import (
+    AIProviderError,
+    AIRateLimitError,
+    LLMClient,
+    LLMResponse,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +87,13 @@ class OpenAIClient(LLMClient):
                 ],
             )
         except Exception as exc:
+            # Rate limits (HTTP 429) get their own subclass so FailoverLLMClient
+            # can switch providers; everything else fails as a plain provider error.
+            import openai
+
+            if isinstance(exc, openai.RateLimitError):
+                logger.warning("Rate limited by %s (%s): %s", self.name, model_id, exc)
+                raise AIRateLimitError(f"{self.name}: rate limited: {exc}") from exc
             logger.warning("OpenAI request failed (%s): %s", model_id, exc)
             raise AIProviderError(f"openai: {exc}") from exc
 
