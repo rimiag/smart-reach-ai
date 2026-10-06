@@ -42,6 +42,7 @@ spec:
         app: smartreach
         component: backend
     spec:
+      enableServiceLinks: false   # no auto-injected FLOWER_*/BACKEND_* service vars
       containers:
         - name: backend
           image: smartreach-ai/backend:local

@@ -23,6 +23,7 @@ spec:
         app: smartreach
         component: worker
     spec:
+      enableServiceLinks: false
       initContainers:
         - name: wait-for-backend
           image: smartreach-ai/backend:local

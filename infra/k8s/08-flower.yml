@@ -39,6 +39,9 @@ spec:
         app: smartreach
         component: flower
     spec:
+      # FLOWER_PORT etc. must not be auto-injected: flower reads FLOWER_PORT
+      # as an int and the service-link value is "tcp://IP:5555" (crash).
+      enableServiceLinks: false
       containers:
         - name: flower
           image: smartreach-ai/backend:local
