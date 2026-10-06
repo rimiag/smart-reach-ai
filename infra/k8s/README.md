@@ -263,6 +263,7 @@ immutable per build; you redeploy an older one).
 |---|---|
 | `minikube image build`: `lstat /var/lib/minikube/build/.../backend: no such file` | Windows subdirectory-context bug — run the build from INSIDE the folder with `.` as context (step 2) |
 | `minikube image build`: `unknown flag: --build-arg` | Not supported — build the frontend via `eval $(minikube docker-env)` + `docker build --build-arg` (step 2) |
+| `docker build`: `failed to boot buildkit ... 404 page not found` (+ "result will only remain in build cache") | The CLI defaulted to the `docker-container` buildx driver, which cannot boot inside minikube's older daemon. Switch to the in-daemon builder: `docker buildx use default`, then rebuild. Fallback: `DOCKER_BUILDKIT=0 docker build ...` |
 | Pod `ImagePullBackOff` for `smartreach-ai/*` | Image not built inside minikube (or tag typo). Run step 2; check `minikube image ls` |
 | mysql `Pending` forever | Cluster out of memory/disk for the PVC — `kubectl -n smartreach describe pod mysql-0`, give minikube more RAM (`minikube start --memory=4096`) |
 | mysql CrashLoop on a REUSED cluster | Old volume has the old password baked in (first-boot rule). Data is disposable here: `kubectl -n smartreach delete statefulset mysql; kubectl -n smartreach delete pvc data-mysql-0; kubectl apply -f infra/k8s/03-mysql.yml` |

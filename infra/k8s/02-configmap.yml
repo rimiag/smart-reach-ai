@@ -2,10 +2,11 @@
 # Secrets (SECRET_KEY, DATABASE_URL, provider keys...) come from the
 # "smartreach-env" Secret, created from secrets.env - never put them here.
 #
-# ONE-TIME STEP before first apply: replace 192.168.49.2 with your
-# cluster IP (see README step 4). The value is machine-specific - do not
-# commit the substituted file; `git checkout infra/k8s/02-configmap.yml`
-# restores the placeholder.
+# ONE-TIME STEP before first apply: replace the __MINIKUBE_IP__ placeholder
+# with your cluster IP (see README step 4):
+#   sed -i "s/__MINIKUBE_IP__/$(minikube ip)/g" infra/k8s/02-configmap.yml
+# The value is machine-specific - do not commit the substituted file;
+# `git checkout infra/k8s/02-configmap.yml` restores the placeholder.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -28,6 +29,6 @@ data:
 
   # Where the browser reaches the app (NodePorts on the minikube IP).
   # The frontend ALSO needs this at image BUILD time - see README step 2.
-  API_URL: "http://192.168.49.2:30081"
-  FRONTEND_URL: "http://192.168.49.2:30080"
-  CORS_ORIGINS: "http://192.168.49.2:30080"
+  API_URL: "http://__MINIKUBE_IP__:30081"
+  FRONTEND_URL: "http://__MINIKUBE_IP__:30080"
+  CORS_ORIGINS: "http://__MINIKUBE_IP__:30080"
