@@ -1,0 +1,9 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Laptop minikube: base as-is. Images stay smartreach-ai/*:local - build them
+# into minikube first (README step 2). Apply with:
+#   kubectl apply -k infra/k8s/overlays/local
+# One-time before first apply, bake your minikube IP into the base configmap:
+#   sed -i "s/__MINIKUBE_IP__/$(minikube ip)/g" infra/k8s/base/02-configmap.yml
+resources:
+  - ../../base

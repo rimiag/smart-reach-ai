@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: smartreach-config
+data:
+  # What the BROWSER uses - the staging VM's LAN IP (none driver: NodePorts
+  # are bound on the VM itself). In-cluster names (redis, mysql, backend)
+  # are untouched - they come from base.
+  API_URL: "http://192.168.1.30:30081"
+  FRONTEND_URL: "http://192.168.1.30:30080"
+  CORS_ORIGINS: "http://192.168.1.30:30080"

@@ -1,0 +1,30 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Staging VM (192.168.1.30, minikube none driver) - the GitOps overlay.
+# Argo CD watches THIS folder on the staging branch and syncs the cluster
+# (infra/k8s/GITOPS.md). Every release = update the two newTag lines below
+# to the k8s-sha-<sha7> produced by the "Build K8s Images" workflow, then
+# commit + push. Rollback = git revert (old tags stay in GHCR).
+namespace: smartreach
+resources:
+  - ../../base
+images:
+  - name: smartreach-ai/backend
+    newName: ghcr.io/rimiag/smart-reach-ai-backend
+    newTag: k8s-sha-0000000   # <- replace after each "Build K8s Images" run
+  - name: smartreach-ai/frontend
+    newName: ghcr.io/rimiag/smart-reach-ai-frontend
+    newTag: k8s-sha-0000000   # <- replace after each "Build K8s Images" run
+patches:
+  # The 5 app deployments pull the private GHCR images; the one-time
+  # ghcr-pull secret must exist in the namespace (GITOPS.md step 2).
+  - path: patches/imagepull.yaml
+    target:
+      kind: Deployment
+      labelSelector: "component in (backend,worker,scheduler,flower,frontend)"
+  # The browser talks to the VM IP (none driver: NodePorts are on the VM),
+  # not to an in-cluster minikube IP - so real URLs here, no placeholder.
+  - path: patches/configmap.yaml
+    target:
+      kind: ConfigMap
+      name: smartreach-config

@@ -1,9 +1,16 @@
 # Kubernetes (minikube) — SmartReach AI
 
-Deploy the whole stack to a local minikube cluster with plain Kubernetes
-manifests (no Helm, no Kustomize). This is the first step of the K8s path:
-**minikube now → staging/prod on managed K8s (EKS) later** — the manifests are
-written so that move changes configuration, not structure.
+Deploy the whole stack to minikube with plain Kubernetes manifests + Kustomize
+overlays. Two consumers of the same base:
+
+- **Laptop (local)** — this README: images built into minikube, `kubectl apply -k`.
+- **Staging VM (192.168.1.30)** — GitOps: Argo CD pulls
+  `overlays/staging` (GHCR images) and syncs the cluster. See
+  [GITOPS.md](GITOPS.md).
+
+This is the first step of the K8s path: **minikube now → staging/prod on
+managed K8s (EKS) later** — the manifests are written so that move changes
+configuration, not structure.
 
 ## TL;DR — every command in order
 
@@ -35,11 +42,11 @@ nano infra/k8s/secrets.env              # or: notepad infra/k8s/secrets.env
 kubectl -n smartreach create secret generic smartreach-env \
   --from-env-file=infra/k8s/secrets.env
 
-# 3. bake your minikube IP into the configmap (one-time, do not commit)
-sed -i "s/__MINIKUBE_IP__/$(minikube ip)/g" infra/k8s/02-configmap.yml
+# 3. bake your minikube IP into the base configmap (one-time, do not commit)
+sed -i "s/__MINIKUBE_IP__/$(minikube ip)/g" infra/k8s/base/02-configmap.yml
 
 # 4. apply everything and watch it come up (~3-5 min first boot)
-kubectl apply -f infra/k8s/
+kubectl apply -k infra/k8s/overlays/local
 kubectl -n smartreach get pods -w       # Ctrl+C when all Running 1/1
 
 # 5. verify
@@ -49,6 +56,11 @@ curl http://$(minikube ip):30081/health # {"status":"ok",...}
 
 # 6. admin (after registering in the browser)
 kubectl -n smartreach exec -it deploy/backend -- python promote_admin.py <your-email>
+
+# 7. reach it from OTHER machines (laptop on the same LAN):
+#    NodePorts bind on the minikube IP only - port-forwards + firewall +
+#    a LAN-URL rebuild are needed. See "Accessing the app from another
+#    machine (LAN)" below.
 ```
 
 Detailed explanation of each step + ops + troubleshooting below.
@@ -66,17 +78,21 @@ namespace "smartreach":
    flower  (Celery monitor)
 ```
 
-| File | What it creates |
+| Path | What it is |
 |---|---|
-| `01-namespace.yml` | the `smartreach` namespace |
-| `02-configmap.yml` | non-secret config (has a `__MINIKUBE_IP__` placeholder — step 4) |
-| `03-mysql.yml` | MySQL 8 StatefulSet + Service + 5Gi PVC |
-| `04-redis.yml` | Redis 7 Deployment + Service (6379 in-cluster) |
-| `05-backend.yml` | FastAPI backend Deployment + Service (NodePort **30081**) |
-| `06-worker.yml` | Celery worker Deployment (waits for backend via initContainer) |
-| `07-scheduler.yml` | Celery beat Deployment |
-| `08-flower.yml` | Flower Deployment + Service (NodePort **30082**) |
-| `09-frontend.yml` | Next.js frontend Deployment + Service (NodePort **30080**) |
+| `base/01-namespace.yml` | the `smartreach` namespace |
+| `base/02-configmap.yml` | non-secret config (has a `__MINIKUBE_IP__` placeholder — step 4) |
+| `base/03-mysql.yml` | MySQL 8 StatefulSet + Service + 5Gi PVC |
+| `base/04-redis.yml` | Redis 7 Deployment + Service (6379 in-cluster) |
+| `base/05-backend.yml` | FastAPI backend Deployment + Service (NodePort **30081**) |
+| `base/06-worker.yml` | Celery worker Deployment (waits for backend via initContainer) |
+| `base/07-scheduler.yml` | Celery beat Deployment |
+| `base/08-flower.yml` | Flower Deployment + Service (NodePort **30082**) |
+| `base/09-frontend.yml` | Next.js frontend Deployment + Service (NodePort **30080**) |
+| `base/kustomization.yaml` | base resource list |
+| `overlays/local/` | laptop minikube: base as-is (local `:local` images) — this README |
+| `overlays/staging/` | staging VM GitOps overlay: GHCR `k8s-sha-*` images, real URLs — [GITOPS.md](GITOPS.md) |
+| `GITOPS.md` | Argo CD guide for the staging VM (pull-based deployment) |
 | `secrets.env.example` | template for the `smartreach-env` Secret (step 3) |
 
 Key facts before you start:
@@ -84,9 +100,14 @@ Key facts before you start:
 - **Images are built inside minikube** (`minikube image build`) with the tag
   `smartreach-ai/backend:local` / `smartreach-ai/frontend:local`. Nothing is
   pulled from a registry; the manifests use `imagePullPolicy: IfNotPresent`.
+  (The staging-VM GitOps overlay swaps these for GHCR images — GITOPS.md.)
+- **Prefer Kustomize-aware applies**: `kubectl apply -k infra/k8s/overlays/local`
+  (render-only preview: `kubectl kustomize infra/k8s/overlays/local`).
 - **The frontend bakes its API URL at build time**
   (`http://<minikube-ip>:30081`). If the cluster IP changes (recreated
-  cluster), rebuild the frontend image (step 2) and redeploy it.
+  cluster), rebuild the frontend image (step 2) and redeploy it. When other
+  machines on the LAN must reach the app, bake the SERVER's LAN IP instead
+  of the minikube IP - see the LAN section below.
 - **The database password is fixed on first boot** of the MySQL volume —
   changing `secrets.env` later does not change it (delete the PVC to reset;
   minikube data is disposable).
@@ -176,21 +197,21 @@ kubectl -n smartreach rollout restart deploy
 
 ## Step 4 — Point the ConfigMap at your minikube IP (one-time)
 
-`02-configmap.yml` contains the placeholder `__MINIKUBE_IP__`. Replace it
-with your cluster IP:
+`base/02-configmap.yml` contains the placeholder `__MINIKUBE_IP__`. Replace
+it with your cluster IP:
 
 ```bash
-sed -i "s/__MINIKUBE_IP__/$(minikube ip)/g" infra/k8s/02-configmap.yml
-grep MINIKUBE infra/k8s/02-configmap.yml    # should print nothing now
+sed -i "s/__MINIKUBE_IP__/$(minikube ip)/g" infra/k8s/base/02-configmap.yml
+grep MINIKUBE infra/k8s/base/02-configmap.yml  # should print nothing now
 ```
 
 The IP is machine-specific — **do not commit the substituted file**
-(`git checkout infra/k8s/02-configmap.yml` restores the placeholder).
+(`git checkout infra/k8s/base/02-configmap.yml` restores the placeholder).
 
 ## Step 5 — Apply everything
 
 ```bash
-kubectl apply -f infra/k8s/
+kubectl apply -k infra/k8s/overlays/local
 ```
 
 Watch it come up (MySQL first boot initializes its data directory, then the
@@ -230,6 +251,77 @@ kubectl -n smartreach exec -it deploy/backend -- python promote_admin.py <your-e
    should show "All required tables exist." (or the create + ensure_columns
    output on the very first boot).
 
+## Accessing the app from another machine (LAN)
+
+With the default `docker` driver, minikube binds NodePorts **inside the
+minikube node** (`192.168.49.2`) - only the server itself can reach that IP.
+From a laptop, `http://<server-ip>:30080` connects to nothing until you do
+all three of these (example server IP `192.168.1.30` - substitute yours).
+
+**1. Open the firewall on the server**
+
+```bash
+sudo ufw allow 30080/tcp && sudo ufw allow 30081/tcp && sudo ufw allow 30082/tcp
+```
+
+**2. Bridge the NodePorts onto the host LAN** with port-forwards. The
+`-n smartreach` is REQUIRED - without it kubectl looks in the `default`
+namespace and each forward dies instantly with
+`services "frontend" not found`:
+
+```bash
+nohup kubectl port-forward -n smartreach --address=0.0.0.0 svc/frontend 30080:3000 >/tmp/pf-frontend.log 2>&1 &
+nohup kubectl port-forward -n smartreach --address=0.0.0.0 svc/backend  30081:8000 >/tmp/pf-backend.log 2>&1 &
+nohup kubectl port-forward -n smartreach --address=0.0.0.0 svc/flower   30082:5555 >/tmp/pf-flower.log 2>&1 &
+
+pgrep -af port-forward                          # 3 processes
+curl -sI http://192.168.1.30:30080 | head -1    # HTTP/1.1 200 OK
+```
+
+**3. Point the browser-facing URLs at the SERVER IP, not the minikube IP**
+
+Both the frontend JS bundle (baked at BUILD time) and the backend CORS list
+(configmap) must use the IP the browser types:
+
+```bash
+# a) rebuild the frontend image with the LAN URL:
+cd frontend
+eval $(minikube -p minikube docker-env)
+DOCKER_BUILDKIT=0 docker build --build-arg NEXT_PUBLIC_API_URL=http://192.168.1.30:30081 \
+  -f Dockerfile -t smartreach-ai/frontend:local .
+exit                                            # leave minikube's docker-env
+kubectl -n smartreach rollout restart deploy/frontend
+
+# b) patch the configmap (sed on a root-owned checkout needs sudo):
+IP=192.168.1.30
+kubectl -n smartreach patch configmap smartreach-config --type merge -p \
+  "{\"data\":{\"API_URL\":\"http://$IP:30081\",\"FRONTEND_URL\":\"http://$IP:30080\",\"CORS_ORIGINS\":\"http://$IP:30080\"}}"
+kubectl -n smartreach rollout restart deploy/backend
+
+# c) prove CORS now allows the browser origin:
+curl -s -i -m 5 -X OPTIONS http://192.168.1.30:30081/api/v1/auth/register \
+  -H "Origin: http://192.168.1.30:30080" \
+  -H "Access-Control-Request-Method: POST" | grep -i access-control
+#   expect: Access-Control-Allow-Origin: http://192.168.1.30:30080
+```
+
+Gotchas learned on staging (2026-10-06):
+
+- **`rollout restart` kills the port-forwards** - they attach to the old
+  pod and die with it. If a curl to `:30081` hangs with no output, the
+  forwards are dead: re-run the three `nohup` lines. For something
+  reboot-proof, swap them for socat listeners (reconnects per connection,
+  survive pod restarts):
+  `sudo apt install socat && sudo socat TCP-LISTEN:30081,fork,reuseaddr TCP:192.168.49.2:30081 &`
+  (repeat per port).
+- **CORS errors in the browser console** ("No 'Access-Control-Allow-Origin'
+  header") mean the configmap still has `__MINIKUBE_IP__`/`192.168.49.2` -
+  patch it (step 3b) and restart the backend.
+- **Half-done setup symptom**: page loads on `:30080` but
+  registration/login fails with `net::ERR_FAILED` - the frontend was
+  rebuilt with the LAN URL but the configmap was not patched (or the other
+  way around). Both MUST use the same server IP.
+
 ## Everyday operations
 
 ```bash
@@ -249,7 +341,7 @@ kubectl -n smartreach exec -it deploy/backend -- bash
 
 # after changing CODE: rebuild the image, then restart the deployments
 # that use it (frontend additionally needs the build-arg, see step 2):
-minikube image build -f backend/Dockerfile -t smartreach-ai/backend:local backend/
+cd backend && minikube image build -f Dockerfile -t smartreach-ai/backend:local . && cd ..
 kubectl -n smartreach rollout restart deploy/backend deploy/worker deploy/scheduler deploy/flower
 ```
 
@@ -264,13 +356,16 @@ immutable per build; you redeploy an older one).
 | `minikube image build`: `lstat /var/lib/minikube/build/.../backend: no such file` | Windows subdirectory-context bug — run the build from INSIDE the folder with `.` as context (step 2) |
 | `minikube image build`: `unknown flag: --build-arg` | Not supported — build the frontend via `eval $(minikube docker-env)` + `docker build --build-arg` (step 2) |
 | `docker build`: `failed to boot buildkit ... 404 page not found` (+ "result will only remain in build cache") | The CLI defaulted to the `docker-container` buildx driver, which cannot boot inside minikube's older daemon. Switch to the in-daemon builder: `docker buildx use default`, then rebuild. Fallback: `DOCKER_BUILDKIT=0 docker build ...` |
+| `kubectl port-forward`: `Error from server (NotFound): services "frontend" not found` | Missing `-n smartreach` - the Services live in the smartreach namespace; kubectl defaults to `default` |
+| Browser: page loads on :30080 but "Registration failed", console shows CORS `No 'Access-Control-Allow-Origin'` | ConfigMap `API_URL`/`CORS_ORIGINS` still `__MINIKUBE_IP__` or `192.168.49.2` - patch to the server LAN IP and restart backend (see "Accessing the app from another machine", step 3b) |
+| flower: `ValueError: invalid literal for int() with base 10: 'tcp://10.96...'` | Kubernetes auto-injected the `FLOWER_PORT` service-link env var and flower parses it as a port number. Fixed by `enableServiceLinks: false` in the manifests; on a cluster with old manifests: `kubectl -n smartreach set env deploy/flower FLOWER_PORT=5555` |
 | Pod `ImagePullBackOff` for `smartreach-ai/*` | Image not built inside minikube (or tag typo). Run step 2; check `minikube image ls` |
 | mysql `Pending` forever | Cluster out of memory/disk for the PVC — `kubectl -n smartreach describe pod mysql-0`, give minikube more RAM (`minikube start --memory=4096`) |
-| mysql CrashLoop on a REUSED cluster | Old volume has the old password baked in (first-boot rule). Data is disposable here: `kubectl -n smartreach delete statefulset mysql; kubectl -n smartreach delete pvc data-mysql-0; kubectl apply -f infra/k8s/03-mysql.yml` |
-| backend CrashLoop, logs show DB connect errors | Secret's `DATABASE_URL` does not match `MYSQL_USER`/`MYSQL_PASSWORD`/`MYSQL_DATABASE`, or password has unencoded special chars. Fix secrets.env, re-create secret (step 3), reset the PVC if the volume already initialized |
+| mysql CrashLoop on a REUSED cluster | Old volume has the old password baked in (first-boot rule). Data is disposable here: `kubectl -n smartreach delete statefulset mysql; kubectl -n smartreach delete pvc data-mysql-0; kubectl apply -k infra/k8s/overlays/local` |
+| backend CrashLoop, logs show DB connect errors | Secret's `DATABASE_URL` does not match `MYSQL_USER`/`MYSQL_PASSWORD`/`MYSQL_DATABASE`, or password has unencoded special chars. Diagnostic shortcut from staging: if mysql's own probes pass (pod 1/1) but the backend gets `1045 Access denied`, `MYSQL_PASSWORD` is correct and `DATABASE_URL` is the stale one - usually still the placeholder. Compare both in the secret, fix secrets.env, re-create secret (step 3). Reset the PVC ONLY if you also changed `MYSQL_PASSWORD` itself (first-boot rule) |
 | backend CrashLoop with a Python traceback | Read `kubectl -n smartreach logs deploy/backend --previous`; the entrypoint exits 1 loudly if tables could not be created |
 | worker stuck in `Init:0/1` | The init container cannot reach `http://backend:8000/health` — check the backend pod is Running/ready first (`kubectl -n smartreach get pods -l component=backend`) |
-| Frontend loads but API calls fail (CORS/console errors) | The bundle's baked URL no longer matches: `minikube ip` changed (cluster recreated) or `02-configmap.yml` still has `__MINIKUBE_IP__`. Fix the configmap AND rebuild the frontend image (step 2), restart both |
+| Frontend loads but API calls fail (CORS/console errors) | The bundle's baked URL no longer matches: `minikube ip` changed (cluster recreated) or `base/02-configmap.yml` still has `__MINIKUBE_IP__`. Fix the configmap AND rebuild the frontend image (step 2), restart both |
 | Everything Pending after `minikube start` | Node not Ready yet — `kubectl get nodes`, wait; if stuck: `minikube delete && minikube start --memory=4096 --cpus=2` |
 | Emails/research do nothing | Those provider keys are empty in the secret — features switch off silently, same behavior as staging (AI assistant returns a clear "no provider" error) |
 
@@ -297,7 +392,7 @@ configuration, in this order:
    with real hostnames/TLS.
 4. **Secrets**: move `smartreach-env` to AWS Secrets Manager / External
    Secrets; the key names stay identical.
-5. **Environment overlays**: at that point copy this folder per environment
-   (`overlays/staging`, `overlays/prod`) or introduce Kustomize — the object
-   shapes stay the same.
+5. **Environment overlays**: already in place (`overlays/local`,
+   `overlays/staging`) — a `overlays/prod` (EKS) clones the staging overlay
+   pattern; the object shapes stay the same.
 6. **Redis**: ElastiCache, same swap pattern as the DB.
