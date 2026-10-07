@@ -26,6 +26,7 @@ Timeline at a glance:
 | 2026-09-23 | Leads workbench + manual emailing + mailbox compose; prod pull-only lesson |
 | 2026-09-24 | Repo cleanup: docs consolidated (this file, DEPLOYMENT.md, README.md) |
 | 2026-09-24 | Kubernetes: full stack deployed on minikube (`infra/k8s/`), path to EKS mapped |
+| 2026-10-07 | GitOps: Argo CD on the staging VM — pull-based deploys, kustomize base+overlays |
 
 ---
 
@@ -316,6 +317,31 @@ backend log confirm a new image booted.
   changes (API URL baked at build time).
 - Guide with ops/troubleshooting + "path to EKS" (GHCR images, RDS,
   Ingress/ALB, External Secrets): `infra/k8s/README.md`.
+
+## GitOps — Argo CD on the staging VM (2026-10-07)
+
+- The pull-based model from the GitOps diagram adopted for the K8s staging
+  path: **Argo CD** runs in the minikube (`none` driver) cluster on
+  192.168.1.30, watches `infra/k8s/overlays/staging` on the staging branch,
+  and syncs with automated + prune + selfHeal. Git is the source of truth;
+  no runner SSH, no kubectl-from-CI.
+- Manifests restructured to **Kustomize base + overlays**: `overlays/local`
+  = the laptop flow as before (local `:local` images); `overlays/staging`
+  rewrites images to GHCR `k8s-sha-<sha7>`, patches the real LAN URLs
+  (browser talks to the VM IP, not an in-cluster minikube IP) and adds the
+  `ghcr-pull` imagePullSecret to the 5 app deployments. A release = one
+  `newTag` edit committed to git; rollback = git revert.
+- New manual workflow **Build K8s Images**: builds GHCR tags `k8s-sha-*`,
+  the frontend with the k8s NodePort API URL (`:30081` — the compose-staging
+  images bake `:8000`), and NO deploy job (Argo deploys). Tag namespaces
+  never overlap (`sha-*` compose, `k8s-sha-*` k8s, `prod-*` prod) so the
+  three flows cannot deploy each other's images.
+- Secrets stay out of git: `smartreach-env` + `ghcr-pull` are one-time
+  out-of-band creates; sealed-secrets/external-secrets deferred. With
+  selfHeal on, manual cluster edits are reverted by design — intended
+  changes go through commits only.
+- Guide: `infra/k8s/GITOPS.md` (prereqs incl. VM RAM bump, Argo install,
+  repo credential, promotion runbook, troubleshooting).
 
 ---
 

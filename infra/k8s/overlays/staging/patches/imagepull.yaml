@@ -1,0 +1,9 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: _patch-targets-the-5-app-deployments-via-labelSelector_
+spec:
+  template:
+    spec:
+      imagePullSecrets:
+        - name: ghcr-pull
