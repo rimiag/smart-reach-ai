@@ -22,7 +22,7 @@
 # Rollback: Run workflow with image_tag = prod-<older-sha7>.
 # =============================================================================
 
-name: Deploy to Production
+name: "EC2 Production (docker-compose)"
 
 on:
   workflow_dispatch:
@@ -50,6 +50,10 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: main
+      # Same UI trap as the staging workflows: the dialog branch is cosmetic.
+      # Make the pinned target + the EKS successor explicit on every run.
+      - name: Notice - dialog branch is ignored by design
+        run: echo "::notice::Dialog branch '${{ github.ref_name }}' is IGNORED. This workflow ALWAYS builds + deploys the head of MAIN as prod-* images to the EC2 docker-compose production. (A future 'EKS Production' workflow will replace this EC2 deployment - see docs/EKS_DEPLOYMENT.md once it lands.)"
       - name: Short sha of main head
         id: sha
         run: echo "short=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"

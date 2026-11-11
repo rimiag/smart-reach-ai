@@ -23,11 +23,11 @@
 # Deliberately minimal: no PR checks, no dependency bots, no scanners.
 # =============================================================================
 
-name: Build and Deploy
+name: "Track 1 - VM Staging (docker-compose)"
 
 on:
-  # Manual only (Actions tab -> Build and Deploy -> Run workflow). A push to
-  # any branch does NOT deploy. Covers normal releases as well as ops moves
+  # Manual only (Actions tab -> Track 1 - VM Staging -> Run workflow). A push
+  # to any branch does NOT deploy. Covers normal releases as well as ops moves
   # like changing the NEXT_PUBLIC_API_URL variable or a RESET_STAGING_DB reset.
   workflow_dispatch:
 
@@ -49,6 +49,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: staging
+      # The "Run workflow" dialog branch does NOT choose the deploy target -
+      # say so loudly on every run so nobody misreads a main-branch run as a
+      # prod (or k8s) deploy. This workflow deploys VM compose staging only.
+      - name: Notice - dialog branch is ignored by design
+        run: echo "::notice::Dialog branch '${{ github.ref_name }}' is IGNORED. Track 1 ALWAYS builds + deploys the head of the STAGING branch to the VM (docker-compose). Prod is a separate workflow (EC2 today, EKS later); k8s staging images are built by 'Track 2'."
       - name: Short sha of staging head
         id: sha
         run: echo "short=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
@@ -76,7 +81,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push
+      - name: Build and push (sha-* tags - VM compose staging ONLY)
         uses: docker/build-push-action@v5
         with:
           context: ./backend
