@@ -24,7 +24,7 @@
 # K8S_NEXT_PUBLIC_API_URL if the VM address ever changes.
 # =============================================================================
 
-name: Build K8s Images
+name: "Track 2 - Minikube Staging (build; Argo deploys)"
 
 on:
   workflow_dispatch:
@@ -44,6 +44,10 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: staging
+      # Same UI trap as Track 1: the dialog branch is cosmetic here too. Also
+      # make clear this workflow NEVER deploys - Argo does, after a tag bump.
+      - name: Notice - dialog branch is ignored by design
+        run: echo "::notice::Dialog branch '${{ github.ref_name }}' is IGNORED. Track 2 ALWAYS builds k8s-sha-* images from the STAGING branch head. It does NOT deploy anything - bump the newTag lines in infra/k8s/overlays/staging/kustomization.yaml, push, and Argo CD syncs the cluster."
       - name: Short sha of staging head
         id: sha
         run: echo "short=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
